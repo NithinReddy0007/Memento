@@ -3,7 +3,7 @@ const http = require('node:http');
 const path = require('node:path');
 const { URL } = require('node:url');
 
-const root = __dirname;
+const root = path.resolve(__dirname, '..');
 const port = Number(process.env.PORT || 3000);
 const tokenName = 'TMDB_READ_ACCESS_TOKEN';
 const defaultCorsOrigins = new Set(['http://localhost:3000', 'http://127.0.0.1:3000']);
@@ -11,7 +11,8 @@ const mimeTypes = {
   '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
-  '.json': 'application/json; charset=utf-8'
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml'
 };
 
 async function loadLocalEnvironment() {
@@ -38,6 +39,8 @@ const genreLabels = {
 const categoryKeys = new Set(['movies', 'tv-shows', 'anime', 'documentaries']);
 const scriptedTvGenres = new Set([18, 35, 80, 9648, 10759, 10765, 10768]);
 const unscriptedTvGenres = new Set([99, 10762, 10763, 10764, 10766, 10767]);
+const imdbRatingCache = new Map();
+const titleDetailsCache = new Map();
 const recommendationProfiles = {
   movies: { minimumYear: new Date().getFullYear() - 12, minimumVotes: 50, minimumRating: 5.5 },
   'tv-shows': { minimumYear: new Date().getFullYear() - 16, minimumVotes: 100, minimumRating: 6 },
@@ -86,6 +89,87 @@ function normalizeItem(item, category, mediaType) {
     originalLanguage: item.original_language || '',
     originCountry: item.origin_country || []
   };
+}
+
+async function lookupImdbRating(imdbId) {
+  const apiKey = process.env.OMDB_API_KEY;
+  if (!apiKey || !imdbId) return null;
+  if (imdbRatingCache.has(imdbId)) return imdbRatingCache.get(imdbId);
+
+  try {
+    const url = new URL('https://www.omdbapi.com/');
+    url.searchParams.set('i', imdbId);
+    url.searchParams.set('apikey', apiKey);
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const data = await response.json();
+    const rating = data.Response === 'True' && data.imdbRating !== 'N/A' ? Number(data.imdbRating) : NaN;
+    const result = Number.isFinite(rating) && rating >= 0 && rating <= 10
+      ? { rating, votes: data.imdbVotes === 'N/A' ? null : data.imdbVotes }
+      : null;
+    imdbRatingCache.set(imdbId, result);
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+async function loadTitleDetails(category, id, mediaType) {
+  const allowedMediaTypes = category === 'anime' ? ['tv', 'movie']
+    : category === 'movies' || category === 'documentaries' ? ['movie']
+      : ['tv'];
+  if (!categoryKeys.has(category) || !allowedMediaTypes.includes(mediaType) || !/^\d{1,12}$/.test(id)) {
+    const error = new Error('Choose a valid title category, media type, and ID.');
+    error.status = 400;
+    throw error;
+  }
+  const cacheKey = `${category}:${mediaType}:${id}`;
+  if (titleDetailsCache.has(cacheKey)) return titleDetailsCache.get(cacheKey);
+
+  const details = await tmdbRequest(`${mediaType}/${id}`, { append_to_response: 'external_ids' });
+  const categoryItem = {
+    genre_ids: (details.genres || []).map((genre) => genre.id),
+    original_language: details.original_language,
+    origin_country: details.origin_country || (details.production_countries || []).map((country) => country.iso_3166_1)
+  };
+  if (!belongsToCategory(categoryItem, category, mediaType)) {
+    const error = new Error('This title does not belong to the requested category.');
+    error.status = 404;
+    throw error;
+  }
+
+  const imdbId = details.external_ids?.imdb_id || details.imdb_id || null;
+  const imdb = await lookupImdbRating(imdbId);
+  const date = details.release_date || details.first_air_date || '';
+  const result = {
+    id: String(details.id),
+    category,
+    mediaType,
+    title: details.title || details.name || 'Untitled',
+    originalTitle: details.original_title || details.original_name || '',
+    releaseDate: date,
+    year: date.slice(0, 4) || null,
+    genres: (details.genres || []).map((genre) => genre.name),
+    overview: details.overview || '',
+    tagline: details.tagline || '',
+    poster: details.poster_path ? `https://image.tmdb.org/t/p/w500${details.poster_path}` : '',
+    backdrop: details.backdrop_path ? `https://image.tmdb.org/t/p/w1280${details.backdrop_path}` : '',
+    runtime: details.runtime || null,
+    episodeRuntime: details.episode_run_time || [],
+    seasons: details.number_of_seasons || null,
+    episodes: details.number_of_episodes || null,
+    status: details.status || '',
+    originalLanguage: details.original_language || '',
+    originCountries: details.origin_country || (details.production_countries || []).map((country) => country.iso_3166_1),
+    productionCompanies: (details.production_companies || []).map((company) => company.name),
+    tmdbRating: Number.isFinite(Number(details.vote_average)) ? Number(details.vote_average) : null,
+    tmdbVoteCount: details.vote_count || 0,
+    imdbId,
+    imdbRating: imdb?.rating ?? null,
+    imdbVotes: imdb?.votes ?? null
+  };
+  titleDetailsCache.set(cacheKey, result);
+  return result;
 }
 
 async function tmdbRequest(endpoint, params = {}) {
@@ -204,6 +288,25 @@ async function loadRecommendations(category, page, rawHistory) {
     items = [...unique.values()];
   }
 
+  if (items.length < 15) {
+    const trendMediaType = category === 'tv-shows' || category === 'anime' ? 'tv' : 'movie';
+    const trendEndpoint = `trending/${trendMediaType}/week`;
+    try {
+      const firstPage = await tmdbRequest(trendEndpoint, { page: 1 });
+      const totalTrendPages = Math.max(1, Number(firstPage.total_pages) || 1);
+      const trendPage = ((page - 1) % totalTrendPages) + 1;
+      const data = trendPage === 1 ? firstPage : await tmdbRequest(trendEndpoint, { page: trendPage });
+      const trending = (data.results || [])
+        .filter((item) => belongsToCategory(item, category, trendMediaType) && isRecommendationQuality(item, category, trendMediaType))
+        .map((item) => normalizeItem(item, category, trendMediaType))
+        .filter((item) => !seen.has(`${item.mediaType}:${item.id}`));
+      const combined = new Map([...items, ...trending].map((item) => [`${item.mediaType}:${item.id}`, item]));
+      items = [...combined.values()];
+    } catch (error) {
+      if (!error.retryable) throw error;
+    }
+  }
+
   if (!personalized || items.length < 15) {
     const endpoint = category === 'tv-shows' || category === 'anime' ? 'discover/tv' : 'discover/movie';
     const mediaType = endpoint.endsWith('/tv') ? 'tv' : 'movie';
@@ -287,6 +390,12 @@ async function readJson(request) {
 
 async function handleApi(request, response, url) {
   try {
+    if (request.method === 'GET' && url.pathname === '/api/details') {
+      const category = url.searchParams.get('category');
+      const id = url.searchParams.get('id') || '';
+      const mediaType = url.searchParams.get('mediaType') || '';
+      return sendJson(response, 200, await loadTitleDetails(category, id, mediaType));
+    }
     if (request.method === 'GET' && url.pathname === '/api/search') {
       const category = url.searchParams.get('category');
       const query = (url.searchParams.get('query') || '').trim();
@@ -348,7 +457,7 @@ async function start() {
         return;
       }
       if (request.method === 'GET' && url.pathname === '/api/health') {
-        return sendJson(response, 200, { status: 'ok' });
+        return sendJson(response, 200, { status: 'ok', imdbRatingsAvailable: Boolean(process.env.OMDB_API_KEY) });
       }
       void handleApi(request, response, url);
     } else if (request.method === 'GET' || request.method === 'HEAD') {

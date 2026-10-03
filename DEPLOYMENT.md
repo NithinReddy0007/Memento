@@ -2,6 +2,8 @@
 
 GitHub Pages serves the static frontend only. The Node backend must be deployed separately; this repository includes a Render Blueprint in `render.yaml`.
 
+The Pages entry point remains `index.html` in the repository root. Feature pages live under `pages/`, shared browser files under `assets/`, and the backend source is `backend/server.js`.
+
 ## Local development
 
 The frontend sends API requests to the Node backend on port 3000 when opened from any `localhost`/loopback port, including a separate VS Code Live Server port. Run the backend and static file server with:
@@ -16,14 +18,16 @@ Open `http://localhost:3000`.
 
 1. Push this repository to GitHub.
 2. In Render, create a new Blueprint and connect `NithinReddy0007/Memento` on the `master` branch. Render will read `render.yaml` and create the `memento-api` web service.
-3. Set `TMDB_READ_ACCESS_TOKEN` in the Render service environment settings. Enter the credential there only; do not put it in GitHub, `api-config.js`, or frontend files.
+3. Set `TMDB_READ_ACCESS_TOKEN` in the Render service environment settings. Enter the credential there only; do not put it in GitHub, `assets/api-config.js`, or frontend files.
 4. Wait for `/api/health` to report `{"status":"ok"}`.
 
-The configured production API origin is `https://memento-api.onrender.com`. If Render assigns a different hostname, update `apiBaseUrl` in `api-config.js` and the `CORS_ORIGINS` value in `render.yaml` to match that hostname and redeploy both services.
+IMDb ratings use OMDb through the backend when `OMDB_API_KEY` is configured in Render's environment settings. This value is optional and is never sent to the browser. Without it, Memento displays an unavailable state rather than substituting a TMDB score.
+
+The configured production API origin is `https://memento-api-7xfs.onrender.com`. If Render assigns a different hostname, update `apiBaseUrl` in `assets/api-config.js` and the `CORS_ORIGINS` value in `render.yaml` to match that hostname and redeploy both services.
 
 ## Deploy the frontend
 
-GitHub Pages uses the repository root as its static site source. In GitHub, open **Settings > Pages**, select the `master` branch and `/ (root)`, then save. The pages load the public API origin from `api-config.js`; it contains no credentials. Localhost detection overrides that value during local development.
+GitHub Pages uses the repository root as its static site source. In GitHub, open **Settings > Pages**, select the `master` branch and `/ (root)`, then save. The pages load the public API origin from `assets/api-config.js`; it contains no credentials. Localhost detection overrides that value during local development.
 
 ## Verify the deployed API
 

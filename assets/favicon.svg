@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="78 55 398 300">
+  <style>
+    .ink { fill: #162a28; stroke: #162a28; }
+    .ground { fill: #f4f3ed; }
+    @media (prefers-color-scheme: dark) {
+      .ink { fill: #e8eee7; stroke: #e8eee7; }
+      .ground { fill: #172321; }
+    }
+  </style>
+  <path d="M146 326V145L292 294 438 145V326" fill="none" class="ink" stroke-linecap="square" stroke-linejoin="miter" stroke-width="34" />
+  <circle cx="146" cy="126" r="58" class="ground" />
+  <circle cx="146" cy="126" r="48" fill="none" class="ink" stroke-width="12" />
+  <circle cx="146" cy="126" r="7" class="ink" />
+  <g class="ground" stroke="#162a28" stroke-width="5">
+    <circle cx="146" cy="99" r="8" />
+    <circle cx="169.38" cy="139.5" r="8" />
+    <circle cx="122.62" cy="139.5" r="8" />
+  </g>
+  <g class="ground">
+    <rect x="141" y="220" width="10" height="15" rx="2" />
+    <rect x="141" y="257" width="10" height="15" rx="2" />
+    <rect x="141" y="294" width="10" height="15" rx="2" />
+  </g>
+</svg>
