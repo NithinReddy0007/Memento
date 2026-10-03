@@ -11,6 +11,7 @@ const storageKey = 'memento.watchHistory.v1';
 const themeStorageKey = 'memento.theme.v1';
 const searchResultCache = new Map();
 let searchDebounce;
+const configuredApiBaseUrl = window.MEMENTO_CONFIG?.apiBaseUrl?.trim() || '';
 const fallbackImages = {
   movies: 'https://image.tmdb.org/t/p/w500/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg',
   'tv-shows': 'https://image.tmdb.org/t/p/w500/rweIrveL43TaxUN0akHmW0oyYCO.jpg',
@@ -57,20 +58,56 @@ function getEntries(history, categoryKey) {
 }
 
 async function searchCategory(categoryKey, query) {
-  const response = await fetch(`/api/search?category=${encodeURIComponent(categoryKey)}&query=${encodeURIComponent(query)}`);
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Catalog search failed.');
+  const queryString = new URLSearchParams({ category: categoryKey, query }).toString();
+  const data = await backendRequest(`/api/search?${queryString}`);
   return data.items || [];
 }
 
 async function loadRecommendations(categoryKey, history, page) {
-  const response = await fetch('/api/recommendations', {
+  return backendRequest('/api/recommendations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ category: categoryKey, page, history: Object.values(history) })
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Recommendations could not be loaded.');
+}
+
+function backendBaseUrl() {
+  const hostname = window.location.hostname.toLowerCase();
+  const isLocalDevelopment = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  const localHostname = hostname === '[::1]' ? '[::1]' : hostname;
+  const baseUrl = isLocalDevelopment
+    ? `${window.location.protocol}//${localHostname}:3000`
+    : configuredApiBaseUrl;
+  if (!baseUrl) {
+    throw new Error('The Memento backend URL is not configured for this deployment. Set apiBaseUrl in api-config.js.');
+  }
+  return baseUrl.replace(/\/+$/, '');
+}
+
+async function backendRequest(path, options = {}) {
+  const url = `${backendBaseUrl()}${path}`;
+  let response;
+  try {
+    response = await fetch(url, options);
+  } catch {
+    throw new Error(`Could not reach the Memento backend at ${url}. Check its deployment and CORS configuration.`);
+  }
+
+  const responseText = await response.text();
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch {
+    data = undefined;
+  }
+
+  const preview = responseText.replace(/\s+/g, ' ').trim().slice(0, 240);
+  if (!response.ok) {
+    throw new Error(`Memento API returned HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}: ${data?.error || preview || 'Empty response'}`);
+  }
+  if (data === undefined) {
+    throw new Error(`Memento API returned non-JSON content (HTTP ${response.status}): ${preview || 'Empty response'}`);
+  }
   return data;
 }
 

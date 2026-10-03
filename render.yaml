@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: memento-api
+    runtime: node
+    plan: free
+    buildCommand: npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: CORS_ORIGINS
+        value: https://nithinreddy0007.github.io
+      - key: TMDB_READ_ACCESS_TOKEN
+        sync: false

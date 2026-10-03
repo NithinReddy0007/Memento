@@ -6,6 +6,7 @@ const { URL } = require('node:url');
 const root = __dirname;
 const port = Number(process.env.PORT || 3000);
 const tokenName = 'TMDB_READ_ACCESS_TOKEN';
+const defaultCorsOrigins = new Set(['http://localhost:3000', 'http://127.0.0.1:3000']);
 const mimeTypes = {
   '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
@@ -248,6 +249,33 @@ function sendJson(response, status, value) {
   response.end(JSON.stringify(value));
 }
 
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  const configuredOrigins = new Set((process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean));
+  if (configuredOrigins.has(origin) || defaultCorsOrigins.has(origin)) return true;
+  try {
+    const url = new URL(origin);
+    return url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function applyCors(request, response) {
+  const origin = request.headers.origin;
+  if (!origin) return true;
+  if (!isAllowedOrigin(origin)) return false;
+  response.setHeader('Access-Control-Allow-Origin', origin);
+  response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  response.setHeader('Access-Control-Max-Age', '86400');
+  response.setHeader('Vary', 'Origin');
+  return true;
+}
+
 async function readJson(request) {
   let body = '';
   for await (const chunk of request) {
@@ -312,6 +340,16 @@ async function start() {
   const server = http.createServer((request, response) => {
     const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
     if (url.pathname.startsWith('/api/')) {
+      if (!applyCors(request, response)) {
+        return sendJson(response, 403, { error: 'This origin is not allowed to access the Memento API.' });
+      }
+      if (request.method === 'OPTIONS') {
+        response.writeHead(204).end();
+        return;
+      }
+      if (request.method === 'GET' && url.pathname === '/api/health') {
+        return sendJson(response, 200, { status: 'ok' });
+      }
       void handleApi(request, response, url);
     } else if (request.method === 'GET' || request.method === 'HEAD') {
       void serveStatic(request, response, url);
@@ -319,7 +357,7 @@ async function start() {
       response.writeHead(405).end('Method not allowed');
     }
   });
-  server.listen(port, '127.0.0.1', () => console.log(`Memento is running at http://localhost:${port}`));
+  server.listen(port, '0.0.0.0', () => console.log(`Memento is listening on port ${port}`));
 }
 
 start().catch((error) => {
