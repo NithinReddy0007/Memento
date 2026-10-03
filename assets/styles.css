@@ -147,6 +147,8 @@ h1 { margin-bottom: 0; font-family: var(--serif); font-size: clamp(34px, 5vw, 53
 .poster-image::after { position: absolute; inset: 38% 0 0; background: linear-gradient(transparent, var(--poster-shade)); content: ''; pointer-events: none; }
 .poster-actions { position: absolute; z-index: 1; top: 8px; right: 8px; display: flex; gap: 6px; opacity: 0; transform: translateY(-3px); transition: opacity .16s, transform .16s; }
 .poster-card:hover .poster-actions, .poster-card:focus-within .poster-actions { opacity: 1; transform: none; }
+.poster-trailer-button { position: absolute; z-index: 2; bottom: 8px; left: 8px; display: inline-flex; min-height: 28px; align-items: center; gap: 5px; padding: 0 9px; border: 1px solid var(--poster-action-border); border-radius: 16px; background: var(--poster-action-bg); color: var(--poster-action-color); cursor: pointer; font: 700 10px var(--sans); }
+.poster-trailer-button:hover, .poster-trailer-button:focus-visible { background: var(--coral); border-color: var(--coral); color: #fff; }
 .poster-action-button { display: grid; width: 30px; height: 30px; place-items: center; padding: 0; border: 1px solid var(--poster-action-border); border-radius: 50%; background: var(--poster-action-bg); color: var(--poster-action-color); cursor: pointer; font-size: 18px; line-height: 1; }
 .poster-action-button:hover, .poster-action-button.is-added { border-color: var(--coral); background: var(--coral); color: #fff; }
 .poster-action-button:disabled { cursor: default; }
@@ -212,6 +214,29 @@ h1 { margin-bottom: 0; font-family: var(--serif); font-size: clamp(34px, 5vw, 53
 .detail-synopsis { margin: 0 0 22px; }
 .detail-synopsis h2 { margin: 0 0 8px; font-family: var(--serif); font-size: 22px; font-weight: 500; }
 .detail-synopsis p { margin: 0; color: var(--ink); font-size: 14px; line-height: 1.65; }
+.extended-plot { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 9px; }
+.extended-plot summary { color: var(--green); cursor: pointer; font-size: 12px; font-weight: 700; }
+.extended-plot p { margin-top: 10px; }
+.detail-trailer { margin: 0 0 24px; }
+.detail-trailer h2 { margin: 0 0 9px; font-family: var(--serif); font-size: 22px; font-weight: 500; }
+.trailer-player { overflow: hidden; width: 100%; aspect-ratio: 16 / 9; border: 1px solid var(--line); background: #080b0a; }
+.trailer-player iframe { display: block; width: 100%; height: 100%; border: 0; }
+.trailer-caption, .trailer-unavailable { margin: 8px 0 0; color: var(--muted); font-size: 11px; }
+.trailer-dialog { width: min(760px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); border: 1px solid var(--line); padding: 18px; background: var(--white); color: var(--ink); box-shadow: 0 24px 80px rgba(0, 0, 0, .38); }
+.trailer-dialog::backdrop { background: rgba(5, 12, 10, .78); backdrop-filter: blur(3px); }
+.trailer-dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.trailer-dialog-header h2 { overflow-wrap: anywhere; margin: 0; font: 500 clamp(18px, 3vw, 25px) var(--serif); }
+.trailer-dialog-header .icon-button { flex: none; color: var(--ink); }
+.trailer-dialog-content .trailer-player { width: 100%; }
+.trailer-dialog-status { margin: 0; padding: 34px 14px; background: var(--empty-surface); color: var(--muted); text-align: center; font-size: 13px; }
+.trailer-dialog-content [role="alert"] { color: var(--ink); }
+.detail-people, .detail-keywords { margin: 0 0 20px; }
+.detail-people h2, .detail-keywords h2 { margin: 0 0 8px; font-family: var(--serif); font-size: 20px; font-weight: 500; }
+.detail-people ul { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
+.detail-people li { display: flex; flex-wrap: wrap; gap: 4px 9px; color: var(--ink); font-size: 11px; }
+.detail-people li span { color: var(--muted); }
+.detail-keywords > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.detail-keywords > div span { padding: 4px 7px; border: 1px solid var(--line); color: var(--muted); font-size: 10px; }
 .detail-facts { margin: 0; border-top: 1px solid var(--line); }
 .detail-facts > div { display: grid; grid-template-columns: minmax(110px, .4fr) minmax(0, 1fr); gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
 .detail-facts dt { color: var(--muted); font-size: 11px; font-weight: 700; }

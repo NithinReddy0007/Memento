@@ -13,3 +13,7 @@ services:
         value: https://nithinreddy0007.github.io
       - key: TMDB_READ_ACCESS_TOKEN
         sync: false
+      - key: OMDB_API_KEY
+        sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false

@@ -39,8 +39,10 @@ const genreLabels = {
 const categoryKeys = new Set(['movies', 'tv-shows', 'anime', 'documentaries']);
 const scriptedTvGenres = new Set([18, 35, 80, 9648, 10759, 10765, 10768]);
 const unscriptedTvGenres = new Set([99, 10762, 10763, 10764, 10766, 10767]);
-const imdbRatingCache = new Map();
+const imdbMetadataCache = new Map();
 const titleDetailsCache = new Map();
+const youtubeTrailerCache = new Map();
+const titleTrailerCache = new Map();
 const recommendationProfiles = {
   movies: { minimumYear: new Date().getFullYear() - 12, minimumVotes: 50, minimumRating: 5.5 },
   'tv-shows': { minimumYear: new Date().getFullYear() - 16, minimumVotes: 100, minimumRating: 6 },
@@ -91,27 +93,129 @@ function normalizeItem(item, category, mediaType) {
   };
 }
 
-async function lookupImdbRating(imdbId) {
+async function lookupImdbMetadata(imdbId) {
   const apiKey = process.env.OMDB_API_KEY;
   if (!apiKey || !imdbId) return null;
-  if (imdbRatingCache.has(imdbId)) return imdbRatingCache.get(imdbId);
+  if (imdbMetadataCache.has(imdbId)) return imdbMetadataCache.get(imdbId);
 
   try {
     const url = new URL('https://www.omdbapi.com/');
     url.searchParams.set('i', imdbId);
     url.searchParams.set('apikey', apiKey);
-    const response = await fetch(url);
+    url.searchParams.set('plot', 'full');
+    const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!response.ok) return null;
     const data = await response.json();
+    if (data.Response !== 'True') return null;
     const rating = data.Response === 'True' && data.imdbRating !== 'N/A' ? Number(data.imdbRating) : NaN;
-    const result = Number.isFinite(rating) && rating >= 0 && rating <= 10
-      ? { rating, votes: data.imdbVotes === 'N/A' ? null : data.imdbVotes }
-      : null;
-    imdbRatingCache.set(imdbId, result);
+    const result = {
+      rating: Number.isFinite(rating) && rating >= 0 && rating <= 10 ? rating : null,
+      votes: data.imdbVotes === 'N/A' ? null : data.imdbVotes || null,
+      extendedPlot: data.Plot && data.Plot !== 'N/A' ? data.Plot : null,
+      title: data.Title || null,
+      year: data.Year || null,
+      rated: data.Rated === 'N/A' ? null : data.Rated || null,
+      released: data.Released === 'N/A' ? null : data.Released || null,
+      runtime: data.Runtime === 'N/A' ? null : data.Runtime || null,
+      genres: data.Genre === 'N/A' ? [] : (data.Genre || '').split(', ').filter(Boolean),
+      director: data.Director === 'N/A' ? null : data.Director || null,
+      writer: data.Writer === 'N/A' ? null : data.Writer || null,
+      actors: data.Actors === 'N/A' ? null : data.Actors || null,
+      language: data.Language === 'N/A' ? null : data.Language || null,
+      country: data.Country === 'N/A' ? null : data.Country || null,
+      awards: data.Awards === 'N/A' ? null : data.Awards || null,
+      boxOffice: data.BoxOffice === 'N/A' ? null : data.BoxOffice || null
+    };
+    imdbMetadataCache.set(imdbId, result);
     return result;
   } catch {
     return null;
   }
+}
+
+function normalizedTitle(value) {
+  return String(value || '').normalize('NFKD').replace(/[^\p{L}\p{N}]+/gu, '').toLowerCase();
+}
+
+function containsTitlePhrase(videoTitle, title) {
+  const tokenize = (value) => String(value || '').normalize('NFKD').toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
+  const videoWords = tokenize(videoTitle);
+  const titleWords = tokenize(title);
+  return titleWords.length > 0 && videoWords.some((_, index) => titleWords.every((word, offset) => videoWords[index + offset] === word));
+}
+
+async function lookupYouTubeTrailer(title, year) {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  if (!apiKey || !title) return null;
+  const cacheKey = `${normalizedTitle(title)}:${year || ''}`;
+  if (youtubeTrailerCache.has(cacheKey)) return youtubeTrailerCache.get(cacheKey);
+
+  try {
+    const url = new URL('https://www.googleapis.com/youtube/v3/search');
+    url.searchParams.set('part', 'snippet');
+    url.searchParams.set('type', 'video');
+    url.searchParams.set('videoEmbeddable', 'true');
+    url.searchParams.set('maxResults', '10');
+    url.searchParams.set('safeSearch', 'strict');
+    url.searchParams.set('q', `${title} ${year || ''} official trailer`.trim());
+    url.searchParams.set('key', apiKey);
+    const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const candidates = (data.items || []).flatMap((item) => {
+      const videoId = item.id?.videoId;
+      const videoTitle = item.snippet?.title || '';
+      const hasTitleMatch = containsTitlePhrase(videoTitle, title);
+      const hasTrailerLabel = /\b(trailer|teaser|official preview)\b/i.test(videoTitle);
+      const channel = item.snippet?.channelTitle || '';
+      const hasOfficialLabel = /\bofficial\b/i.test(channel) || /\bofficial\b/i.test(videoTitle);
+      if (!videoId || !/^[A-Za-z0-9_-]{6,}$/.test(videoId) || !hasTitleMatch || !hasTrailerLabel || !hasOfficialLabel) return [];
+      return [{
+        name: videoTitle,
+        type: /\bteaser\b/i.test(videoTitle) ? 'Teaser' : 'Trailer',
+        official: true,
+        publishedAt: item.snippet?.publishedAt || '',
+        site: 'YouTube',
+        source: 'YouTube Data API',
+        embedUrl: `https://www.youtube-nocookie.com/embed/${videoId}?controls=1&playsinline=1&rel=0`
+      }];
+    });
+    candidates.sort((first, second) => Number(second.official) - Number(first.official)
+      || Number(second.type === 'Trailer') - Number(first.type === 'Trailer')
+      || second.publishedAt.localeCompare(first.publishedAt));
+    const trailer = candidates[0] || null;
+    youtubeTrailerCache.set(cacheKey, trailer);
+    return trailer;
+  } catch {
+    return null;
+  }
+}
+
+function selectPlayableTrailer(videos) {
+  const candidates = videos.flatMap((video) => {
+    if (!['Trailer', 'Teaser'].includes(video.type)) return [];
+    let embedUrl;
+    if (video.site === 'YouTube' && /^[A-Za-z0-9_-]{6,}$/.test(video.key || '')) {
+      embedUrl = `https://www.youtube-nocookie.com/embed/${video.key}?controls=1&playsinline=1&rel=0`;
+    } else if (video.site === 'Vimeo' && /^\d{5,}$/.test(video.key || '')) {
+      embedUrl = `https://player.vimeo.com/video/${video.key}?dnt=1`;
+    } else {
+      return [];
+    }
+    return [{
+      name: video.name || video.type,
+      type: video.type,
+      official: Boolean(video.official),
+      publishedAt: video.published_at || '',
+      site: video.site,
+      source: 'TMDB',
+      embedUrl
+    }];
+  });
+  candidates.sort((first, second) => Number(second.official) - Number(first.official)
+    || Number(second.type === 'Trailer') - Number(first.type === 'Trailer')
+    || second.publishedAt.localeCompare(first.publishedAt));
+  return candidates[0] || null;
 }
 
 async function loadTitleDetails(category, id, mediaType) {
@@ -126,7 +230,7 @@ async function loadTitleDetails(category, id, mediaType) {
   const cacheKey = `${category}:${mediaType}:${id}`;
   if (titleDetailsCache.has(cacheKey)) return titleDetailsCache.get(cacheKey);
 
-  const details = await tmdbRequest(`${mediaType}/${id}`, { append_to_response: 'external_ids' });
+  const details = await tmdbRequest(`${mediaType}/${id}`, { append_to_response: 'external_ids,credits,keywords' });
   const categoryItem = {
     genre_ids: (details.genres || []).map((genre) => genre.id),
     original_language: details.original_language,
@@ -139,8 +243,13 @@ async function loadTitleDetails(category, id, mediaType) {
   }
 
   const imdbId = details.external_ids?.imdb_id || details.imdb_id || null;
-  const imdb = await lookupImdbRating(imdbId);
+  const imdb = await lookupImdbMetadata(imdbId);
   const date = details.release_date || details.first_air_date || '';
+  const keywords = mediaType === 'movie' ? details.keywords?.keywords || [] : details.keywords?.results || [];
+  const keyPeople = mediaType === 'tv'
+    ? (details.created_by || []).map((person) => ({ name: person.name, role: 'Creator' }))
+    : (details.credits?.crew || []).filter((person) => person.job === 'Director').slice(0, 3)
+      .map((person) => ({ name: person.name, role: 'Director' }));
   const result = {
     id: String(details.id),
     category,
@@ -162,14 +271,41 @@ async function loadTitleDetails(category, id, mediaType) {
     originalLanguage: details.original_language || '',
     originCountries: details.origin_country || (details.production_countries || []).map((country) => country.iso_3166_1),
     productionCompanies: (details.production_companies || []).map((company) => company.name),
+    keyPeople,
+    cast: (details.credits?.cast || []).slice(0, 6).map((person) => ({ name: person.name, role: person.character || '' })),
+    keywords: keywords.slice(0, 10).map((keyword) => keyword.name),
     tmdbRating: Number.isFinite(Number(details.vote_average)) ? Number(details.vote_average) : null,
     tmdbVoteCount: details.vote_count || 0,
     imdbId,
     imdbRating: imdb?.rating ?? null,
-    imdbVotes: imdb?.votes ?? null
+    imdbVotes: imdb?.votes ?? null,
+    extendedSynopsis: imdb?.extendedPlot ?? null,
+    omdb: imdb,
+    trailer: null
   };
   titleDetailsCache.set(cacheKey, result);
   return result;
+}
+
+async function loadTitleTrailer(details) {
+  const cacheKey = `${details.category}:${details.mediaType}:${details.id}`;
+  if (titleTrailerCache.has(cacheKey)) return titleTrailerCache.get(cacheKey);
+
+  let trailer = await lookupYouTubeTrailer(details.title, details.year);
+  if (!trailer) {
+    const languages = [...new Set(['en-US', details.originalLanguage].filter(Boolean))];
+    for (const language of languages) {
+      try {
+        const videos = await tmdbRequest(`${details.mediaType}/${details.id}/videos`, { language });
+        trailer = selectPlayableTrailer(videos.results || []);
+        if (trailer) break;
+      } catch {
+        continue;
+      }
+    }
+  }
+  titleTrailerCache.set(cacheKey, trailer);
+  return trailer;
 }
 
 async function tmdbRequest(endpoint, params = {}) {
@@ -390,6 +526,34 @@ async function readJson(request) {
 
 async function handleApi(request, response, url) {
   try {
+    if (request.method === 'GET' && url.pathname === '/api/omdb') {
+      const imdbId = url.searchParams.get('imdbId') || '';
+      if (!/^tt\d{5,12}$/.test(imdbId)) {
+        return sendJson(response, 400, { error: 'A valid IMDb title ID is required.' });
+      }
+      if (!process.env.OMDB_API_KEY) {
+        return sendJson(response, 200, { configured: false, available: false, imdbId, metadata: null });
+      }
+      const metadata = await lookupImdbMetadata(imdbId);
+      return sendJson(response, 200, {
+        configured: true,
+        available: Boolean(metadata),
+        imdbId,
+        metadata
+      });
+    }
+    if (request.method === 'GET' && url.pathname === '/api/trailer') {
+      const category = url.searchParams.get('category') || '';
+      const id = url.searchParams.get('id') || '';
+      const mediaType = url.searchParams.get('mediaType') || '';
+      const details = await loadTitleDetails(category, id, mediaType);
+      const trailer = await loadTitleTrailer(details);
+      return sendJson(response, 200, {
+        available: Boolean(trailer?.embedUrl),
+        youtubeConfigured: Boolean(process.env.YOUTUBE_API_KEY),
+        trailer
+      });
+    }
     if (request.method === 'GET' && url.pathname === '/api/details') {
       const category = url.searchParams.get('category');
       const id = url.searchParams.get('id') || '';
@@ -457,7 +621,11 @@ async function start() {
         return;
       }
       if (request.method === 'GET' && url.pathname === '/api/health') {
-        return sendJson(response, 200, { status: 'ok', imdbRatingsAvailable: Boolean(process.env.OMDB_API_KEY) });
+        return sendJson(response, 200, {
+          status: 'ok',
+          imdbRatingsAvailable: Boolean(process.env.OMDB_API_KEY),
+          youtubeTrailersAvailable: Boolean(process.env.YOUTUBE_API_KEY)
+        });
       }
       void handleApi(request, response, url);
     } else if (request.method === 'GET' || request.method === 'HEAD') {

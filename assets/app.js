@@ -167,8 +167,9 @@ function escapeHTML(value) {
 function appHref(relativePath) {
   const pathname = window.location.pathname;
   const pagesIndex = pathname.indexOf('/pages/');
-  const basePath = pagesIndex >= 0 ? pathname.slice(0, pagesIndex + 1) : pathname.slice(0, pathname.lastIndexOf('/') + 1);
-  return `${basePath}${relativePath.replace(/^\/+/, '')}`;
+  const basePath = pagesIndex >= 0 ? pathname.slice(0, pagesIndex) : pathname.slice(0, pathname.lastIndexOf('/') + 1);
+  const normalizedBasePath = basePath.endsWith('/') ? basePath : `${basePath}/`;
+  return `${normalizedBasePath}${relativePath.replace(/^\/+/, '')}`;
 }
 
 function contentDetailsHref(categoryKey, item) {
@@ -188,7 +189,7 @@ function navMarkup(activePage) {
         <g fill="var(--paper)" stroke="currentColor" stroke-width="5"><circle cx="146" cy="99" r="8"></circle><circle cx="169.38" cy="139.5" r="8"></circle><circle cx="122.62" cy="139.5" r="8"></circle></g>
         <g fill="var(--paper)"><rect x="141" y="220" width="10" height="15" rx="2"></rect><rect x="141" y="257" width="10" height="15" rx="2"></rect><rect x="141" y="294" width="10" height="15" rx="2"></rect></g>
       </svg>
-      <span>emento</span>
+      <span>Memento</span>
     </a>
     <nav class="nav" aria-label="Main navigation">${navigation.map((item) => `<a href="${appHref(item.href)}" class="${item.page === activePage ? 'active' : ''}" ${item.page === activePage ? 'aria-current="page"' : ''}>${item.label}</a>`).join('')}</nav>
     <div class="top-actions"><button class="icon-button theme-toggle" type="button" aria-label="Switch to dark theme" title="Switch theme">☾</button></div>
@@ -218,7 +219,11 @@ function homeMarkup() {
       <div class="hero-art" role="img" aria-label="Rows of seats in a cinema"></div>
     </section>
     ${Object.keys(categories).map(recommendationSection).join('')}
-  </main><footer class="footer">Your watch history stays in this browser.</footer>`;
+  </main><footer class="footer">Your watch history stays in this browser.</footer>
+  <dialog class="trailer-dialog" data-trailer-dialog aria-labelledby="trailer-dialog-title">
+    <div class="trailer-dialog-header"><h2 id="trailer-dialog-title" data-trailer-title>Trailer</h2><button class="icon-button" type="button" data-close-trailer aria-label="Close trailer">×</button></div>
+    <div class="trailer-dialog-content" data-trailer-content><p class="trailer-dialog-status" role="status">Loading trailer...</p></div>
+  </dialog>`;
 }
 
 function historyRow(entry) {
@@ -300,6 +305,7 @@ function recommendationCard(categoryKey, item) {
   return `<article class="poster-card" data-content-key="${escapeHTML(key)}">
     <div class="poster-image">
       <a class="poster-details-link" href="${detailsHref}" aria-label="View ${escapeHTML(item.title)} details">${imageMarkup(item, categoryKey)}</a>
+      <button class="poster-trailer-button" type="button" data-play-trailer="${escapeHTML(key)}" aria-label="Play ${escapeHTML(item.title)} trailer in Memento" title="Play trailer">▶ <span>Trailer</span></button>
       <div class="poster-actions" aria-label="Actions for ${escapeHTML(item.title)}">
         <button class="poster-action-button ${inHistory ? 'is-added' : ''}" type="button" data-add-history="${escapeHTML(key)}" aria-label="${inHistory ? 'Already in' : 'Add to'} Watch History: ${escapeHTML(item.title)}" title="${inHistory ? 'Already in Watch History' : 'Add to Watch History'}" ${inHistory ? 'disabled' : ''}>${inHistory ? '✓' : '+'}</button>
         <button class="poster-action-button poster-heart ${savedForLater ? 'is-added' : ''}" type="button" data-add-someday="${escapeHTML(key)}" aria-label="${savedForLater ? 'Already in' : 'Add to'} Someday: ${escapeHTML(item.title)}" title="${savedForLater ? 'Already in Someday' : 'Save for Someday'}" ${savedForLater ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"></path></svg></button>
@@ -329,6 +335,39 @@ function addRecommendationToCollection(button, categoryKey, collectionName) {
   if (collectionName === 'history') button.textContent = '✓';
   button.setAttribute('aria-label', `${collectionName === 'history' ? 'Added to Watch History' : 'Saved to Someday'}: ${item.title}`);
   button.title = collectionName === 'history' ? 'Added to Watch History' : 'Saved to Someday';
+}
+
+async function openRecommendationTrailer(item) {
+  const dialog = document.querySelector('[data-trailer-dialog]');
+  const title = document.querySelector('[data-trailer-title]');
+  const content = document.querySelector('[data-trailer-content]');
+  if (!dialog || !title || !content || typeof dialog.showModal !== 'function') return;
+
+  title.textContent = `${item.title} · Trailer`;
+  content.innerHTML = '<p class="trailer-dialog-status" role="status">Finding an official trailer...</p>';
+  dialog.showModal();
+
+  try {
+    const query = new URLSearchParams({
+      category: item.category,
+      mediaType: item.mediaType,
+      id: item.id
+    });
+    const result = await backendRequest(`/api/trailer?${query.toString()}`);
+    const trailer = result.trailer;
+    if (!result.available || !trailer?.embedUrl) {
+      content.innerHTML = '<p class="trailer-dialog-status" role="status">A playable trailer is currently unavailable for this title.</p>';
+      return;
+    }
+
+    const embedUrl = new URL(trailer.embedUrl);
+    if (embedUrl.protocol !== 'https:' || !['www.youtube-nocookie.com', 'www.youtube.com', 'player.vimeo.com'].includes(embedUrl.hostname)) {
+      throw new Error('The backend returned an unsupported trailer player.');
+    }
+    content.innerHTML = `<div class="trailer-player"><iframe src="${escapeHTML(embedUrl.href)}" title="${escapeHTML(item.title)} trailer" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div><p class="trailer-caption">${escapeHTML(trailer.name || 'Trailer')}${trailer.official ? ' · Official' : ''}</p>`;
+  } catch (error) {
+    content.innerHTML = `<p class="trailer-dialog-status" role="alert">${escapeHTML(error.message)}</p>`;
+  }
 }
 
 async function loadRecommendationRating(card) {
@@ -388,7 +427,13 @@ function detailsContentMarkup(detail) {
     ['Status', detail.status],
     ['Original language', detail.originalLanguage],
     ['Country', detail.originCountries?.join(', ')],
-    ['Production', detail.productionCompanies?.slice(0, 3).join(', ')]
+    ['Production', detail.productionCompanies?.slice(0, 3).join(', ')],
+    ['Created by', detail.keyPeople?.map((person) => person.name).join(', ')],
+    ['OMDb rated', detail.omdb?.rated],
+    ['OMDb runtime', detail.omdb?.runtime],
+    ['Director', detail.omdb?.director],
+    ['Awards', detail.omdb?.awards],
+    ['Box office', detail.omdb?.boxOffice]
   ].filter(([, value]) => value);
   const imdbValue = Number.isFinite(detail.imdbRating) ? `${detail.imdbRating.toFixed(1)} / 10` : 'Unavailable';
   return `<article class="content-detail">
@@ -400,11 +445,25 @@ function detailsContentMarkup(detail) {
       ${detail.tagline ? `<p class="detail-tagline">${escapeHTML(detail.tagline)}</p>` : ''}
       <div class="detail-genres">${(detail.genres || []).map((genre) => `<span>${escapeHTML(genre)}</span>`).join('')}</div>
       <div class="detail-ratings"><div class="detail-rating"><span>IMDb</span><strong class="${Number.isFinite(detail.imdbRating) ? '' : 'is-unavailable'}">${imdbValue}</strong>${detail.imdbVotes ? `<small>${escapeHTML(detail.imdbVotes)} votes</small>` : ''}</div>${Number.isFinite(detail.tmdbRating) ? `<div class="detail-rating"><span>TMDB</span><strong>${detail.tmdbRating.toFixed(1)} / 10</strong></div>` : ''}</div>
-      <section class="detail-synopsis"><h2>Synopsis</h2><p>${detail.overview ? escapeHTML(detail.overview) : 'Synopsis unavailable from the content catalog.'}</p></section>
+      <section class="detail-synopsis"><h2>Synopsis</h2><p>${detail.overview ? escapeHTML(detail.overview) : 'Synopsis unavailable from the content catalog.'}</p>${detail.extendedSynopsis && detail.extendedSynopsis !== detail.overview ? `<details class="extended-plot"><summary>Expanded plot (may contain spoilers)</summary><p>${escapeHTML(detail.extendedSynopsis)}</p></details>` : ''}</section>
+      ${trailerMarkup(detail)}
+      ${detail.cast?.length ? `<section class="detail-people"><h2>Featuring</h2><ul>${detail.cast.map((person) => `<li><strong>${escapeHTML(person.name)}</strong>${person.role ? `<span>${escapeHTML(person.role)}</span>` : ''}</li>`).join('')}</ul></section>` : ''}
+      ${detail.keywords?.length ? `<section class="detail-keywords"><h2>Topics</h2><div>${detail.keywords.map((keyword) => `<span>${escapeHTML(keyword)}</span>`).join('')}</div></section>` : ''}
       ${facts.length ? `<dl class="detail-facts">${facts.map(([label, value]) => `<div><dt>${escapeHTML(label)}</dt><dd>${escapeHTML(value)}</dd></div>`).join('')}</dl>` : ''}
       ${detail.imdbId ? `<a class="detail-external-link" href="https://www.imdb.com/title/${encodeURIComponent(detail.imdbId)}/" target="_blank" rel="noreferrer">View on IMDb</a>` : ''}
     </div>
   </article>`;
+}
+
+function trailerMarkup(detail) {
+  if (!detail.trailer?.embedUrl) {
+    return '<section class="detail-trailer" id="trailer"><h2>Trailer</h2><p class="trailer-unavailable">Trailer currently unavailable for this title.</p></section>';
+  }
+  return `<section class="detail-trailer">
+    <h2 id="trailer">Trailer</h2>
+    <div class="trailer-player"><iframe src="${escapeHTML(detail.trailer.embedUrl)}" title="${escapeHTML(detail.title)} ${escapeHTML(detail.trailer.type.toLowerCase())}" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+    <p class="trailer-caption">${escapeHTML(detail.trailer.name)}${detail.trailer.official ? ' · Official' : ''}${detail.trailer.source === 'YouTube Data API' ? ' · YouTube' : ''}</p>
+  </section>`;
 }
 
 async function loadContentDetails() {
@@ -418,8 +477,30 @@ async function loadContentDetails() {
   });
   try {
     const details = await backendRequest(`/api/details?${query.toString()}`);
+    const [omdbResult, trailerResult] = await Promise.allSettled([
+      details.imdbId
+        ? backendRequest(`/api/omdb?${new URLSearchParams({ imdbId: details.imdbId }).toString()}`)
+        : Promise.resolve(null),
+      backendRequest(`/api/trailer?${query.toString()}`)
+    ]);
+    const omdbResponse = omdbResult.status === 'fulfilled' ? omdbResult.value : null;
+    const trailerResponse = trailerResult.status === 'fulfilled' ? trailerResult.value : null;
+    if (omdbResponse?.available && omdbResponse.metadata) {
+      details.omdb = omdbResponse.metadata;
+      details.imdbRating = omdbResponse.metadata.rating;
+      details.imdbVotes = omdbResponse.metadata.votes;
+      details.extendedSynopsis = omdbResponse.metadata.extendedPlot;
+    }
+    if (trailerResponse?.available) details.trailer = trailerResponse.trailer;
     container.innerHTML = detailsContentMarkup(details);
     document.title = `${details.title} | Memento`;
+    if (window.location.hash === '#trailer') {
+      requestAnimationFrame(() => {
+        const trailer = document.querySelector('#trailer');
+        trailer?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        trailer?.focus({ preventScroll: true });
+      });
+    }
   } catch (error) {
     container.innerHTML = `<div class="empty-state"><h1>Details unavailable</h1><p>${escapeHTML(error.message)}</p><a class="button-dark" href="${appHref('index.html')}">Back to Home</a></div>`;
   }
@@ -513,6 +594,26 @@ function render() {
 
   root.querySelector('.theme-toggle')?.addEventListener('click', () => {
     setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+  });
+  if (root.dataset.trailerClickHandler !== 'ready') {
+    root.dataset.trailerClickHandler = 'ready';
+    root.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-play-trailer]');
+      if (!button || !root.contains(button)) return;
+      const item = searchResultCache.get(button.dataset.playTrailer);
+      if (item) void openRecommendationTrailer(item);
+    });
+  }
+  root.querySelector('[data-close-trailer]')?.addEventListener('click', () => {
+    const dialog = root.querySelector('[data-trailer-dialog]');
+    if (dialog?.open) dialog.close();
+  });
+  root.querySelector('[data-trailer-dialog]')?.addEventListener('click', (event) => {
+    if (event.target === event.currentTarget) event.currentTarget.close();
+  });
+  root.querySelector('[data-trailer-dialog]')?.addEventListener('close', () => {
+    const content = root.querySelector('[data-trailer-content]');
+    if (content) content.innerHTML = '<p class="trailer-dialog-status" role="status">Loading trailer...</p>';
   });
   root.querySelectorAll('[data-title-search]').forEach((form) => {
     const input = form.querySelector('input[name="query"]');

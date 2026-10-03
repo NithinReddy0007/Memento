@@ -21,7 +21,9 @@ Open `http://localhost:3000`.
 3. Set `TMDB_READ_ACCESS_TOKEN` in the Render service environment settings. Enter the credential there only; do not put it in GitHub, `assets/api-config.js`, or frontend files.
 4. Wait for `/api/health` to report `{"status":"ok"}`.
 
-IMDb ratings use OMDb through the backend when `OMDB_API_KEY` is configured in Render's environment settings. This value is optional and is never sent to the browser. Without it, Memento displays an unavailable state rather than substituting a TMDB score.
+IMDb ratings and optional expanded plot text use OMDb through the backend when `OMDB_API_KEY` is configured in Render's environment settings. This value is optional and is never sent to the browser. Without it, Memento displays an unavailable IMDb rating and uses TMDB's synopsis. The expanded plot stays collapsed and is labeled as possibly containing spoilers.
+
+YouTube trailer search uses the backend-only `YOUTUBE_API_KEY`. Configure it in Render's environment settings; it is never sent to the browser. Trailer candidates are searched for the exact TMDB title and year, restricted to embeddable YouTube videos, and only accepted when the result title matches and is labeled official. If YouTube is unavailable or has no suitable result, Memento falls back to verified TMDB trailer metadata.
 
 The configured production API origin is `https://memento-api-7xfs.onrender.com`. If Render assigns a different hostname, update `apiBaseUrl` in `assets/api-config.js` and the `CORS_ORIGINS` value in `render.yaml` to match that hostname and redeploy both services.
 
