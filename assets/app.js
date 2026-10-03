@@ -305,7 +305,6 @@ function recommendationCard(categoryKey, item) {
   return `<article class="poster-card" data-content-key="${escapeHTML(key)}">
     <div class="poster-image">
       <a class="poster-details-link" href="${detailsHref}" aria-label="View ${escapeHTML(item.title)} details">${imageMarkup(item, categoryKey)}</a>
-      <button class="poster-trailer-button" type="button" data-play-trailer="${escapeHTML(key)}" aria-label="Play ${escapeHTML(item.title)} trailer in Memento" title="Play trailer">▶ <span>Trailer</span></button>
       <div class="poster-actions" aria-label="Actions for ${escapeHTML(item.title)}">
         <button class="poster-action-button ${inHistory ? 'is-added' : ''}" type="button" data-add-history="${escapeHTML(key)}" aria-label="${inHistory ? 'Already in' : 'Add to'} Watch History: ${escapeHTML(item.title)}" title="${inHistory ? 'Already in Watch History' : 'Add to Watch History'}" ${inHistory ? 'disabled' : ''}>${inHistory ? '✓' : '+'}</button>
         <button class="poster-action-button poster-heart ${savedForLater ? 'is-added' : ''}" type="button" data-add-someday="${escapeHTML(key)}" aria-label="${savedForLater ? 'Already in' : 'Add to'} Someday: ${escapeHTML(item.title)}" title="${savedForLater ? 'Already in Someday' : 'Save for Someday'}" ${savedForLater ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"></path></svg></button>
