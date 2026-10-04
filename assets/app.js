@@ -226,15 +226,34 @@ function homeMarkup() {
   </dialog>`;
 }
 
-function historyRow(entry) {
-  return `<article class="history-row">
-    <a href="${contentDetailsHref(entry.categoryKey, entry.item)}" aria-label="View ${escapeHTML(entry.item.title)} details"><div class="poster-image">${imageMarkup(entry.item, entry.categoryKey)}</div></a>
-    <div><h3><a href="${contentDetailsHref(entry.categoryKey, entry.item)}">${escapeHTML(entry.item.title)}</a></h3><p>${entry.category.label} · ${entry.item.year}</p></div>
-    <select class="status-select" data-status-key="${entry.key}" aria-label="Tracking status for ${escapeHTML(entry.item.title)}">
+function watchedCard(entry) {
+  const detailsHref = contentDetailsHref(entry.categoryKey, entry.item);
+  const title = escapeHTML(entry.item.title);
+  const metadata = [entry.item.year === '—' ? '' : entry.item.year, entry.category.label].filter(Boolean).map(escapeHTML).join(' · ');
+  return `<article class="poster-card watched-card">
+    <div class="poster-image">
+      <a class="poster-details-link" href="${detailsHref}" aria-label="View ${title} details">${imageMarkup(entry.item, entry.categoryKey)}</a>
+      <div class="poster-actions" aria-label="Actions for ${title}">
+        <button class="poster-action-button poster-remove" type="button" data-remove-history="${escapeHTML(entry.key)}" aria-label="Remove ${title} from watch history" title="Remove from watch history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg></button>
+      </div>
+    </div>
+    <div class="poster-meta"><span>${metadata}</span></div>
+    <h3><a href="${detailsHref}">${title}</a></h3>
+    <select class="status-select" data-status-key="${escapeHTML(entry.key)}" aria-label="Tracking status for ${title}">
       <option value="watching" ${entry.status === 'watching' ? 'selected' : ''}>Watching</option>
       <option value="completed" ${entry.status === 'completed' ? 'selected' : ''}>Completed</option>
     </select>
   </article>`;
+}
+
+function removeFromHistory(key) {
+  const history = readHistory();
+  const entry = history[key];
+  if (!entry) return;
+  if (!window.confirm(`Remove "${entry.item?.title || 'this title'}" from your watch history?`)) return;
+  delete history[key];
+  writeHistory(history);
+  render();
 }
 
 function historyMarkup(history) {
@@ -245,7 +264,7 @@ function historyMarkup(history) {
     const category = categories[categoryKey];
     return `<section class="section" style="--category-color:${category.color}">
       <div class="section-heading"><div><div class="category-label">${category.label}</div><h2>${categoryEntries.length ? `${categoryEntries.length} ${categoryEntries.length === 1 ? 'title' : 'titles'} tracked` : `No ${category.label.toLowerCase()} tracked yet`}</h2></div><a class="text-link" href="${appHref(category.page)}">Browse</a></div>
-      ${categoryEntries.length ? `<div class="history-list">${categoryEntries.map(historyRow).join('')}</div>` : `<div class="empty-state"><p>Add titles from ${category.label.toLowerCase()} to keep your history together.</p><a class="button-dark" href="${appHref(category.page)}">Browse ${category.label.toLowerCase()}</a></div>`}
+      ${categoryEntries.length ? `<div class="poster-grid watched-grid">${categoryEntries.map(watchedCard).join('')}</div>` : `<div class="empty-state"><p>Add titles from ${category.label.toLowerCase()} to keep your history together.</p><a class="button-dark" href="${appHref(category.page)}">Browse ${category.label.toLowerCase()}</a></div>`}
     </section>`;
   }).join('');
   return `${navMarkup('history')}<main class="main">
@@ -593,7 +612,7 @@ function importSectionMarkup(categoryKey, category) {
     <p><strong>${summary.added}</strong> added${summary.existing ? ` · ${summary.existing} already in history` : ''}${summary.unverified.length ? ` · ${summary.unverified.length} not added` : ''}${summary.truncated ? ` · only the first ${importMaxTitles} titles were read` : ''}</p>
     ${summary.unverified.length ? `<details class="import-skipped"><summary>Not added</summary><ul>${summary.unverified.map((entry) => `<li><span>${escapeHTML(entry.input)}</span><em>${escapeHTML(entry.reason)}</em></li>`).join('')}</ul></details>` : ''}
   </div>` : '';
-  return `<section class="section import-section"><div class="section-heading"><div><p class="eyebrow">Already watched</p><h2>Import ${category.label.toLowerCase()} from a .txt file</h2></div></div>
+  return `<section class="section import-section" id="import-watched"><div class="section-heading"><div><p class="eyebrow">Already watched</p><h2>Import ${category.label.toLowerCase()} from a .txt file</h2></div></div>
     <form class="import-form" data-import-form="${categoryKey}">
       <input id="import-${categoryKey}" name="file" type="file" accept=".txt,text/plain" aria-label="Choose a .txt file of watched ${category.label.toLowerCase()}">
       <button class="button-dark" type="submit" disabled>Import</button>
@@ -673,13 +692,13 @@ function categoryMarkup(categoryKey, history) {
   const category = categories[categoryKey];
   const entries = getEntries(history, categoryKey);
   return `${navMarkup(categoryKey)}<main class="main" style="--category-color:${category.color};--category-wash:${category.wash}">
-    <section class="category-hero"><div><p class="eyebrow">Memento · ${category.label}</p><h1>${category.label}</h1><p>${category.description}</p></div><span class="category-number" aria-hidden="true">0${Object.keys(categories).indexOf(categoryKey) + 1}</span></section>
+    <section class="category-hero"><div><p class="eyebrow">Memento · ${category.label}</p><h1>${category.label}</h1><p>${category.description}</p><a class="button-dark hero-import-link" href="#import-watched">Import watched list (.txt)</a></div><span class="category-number" aria-hidden="true">0${Object.keys(categories).indexOf(categoryKey) + 1}</span></section>
     <section class="section add-title-section"><div class="section-heading"><div><p class="eyebrow">Find something to track</p><h2>Search ${category.label.toLowerCase()}</h2></div></div>
       <form class="title-search" data-title-search="${categoryKey}"><label for="search-${categoryKey}">Title</label><input id="search-${categoryKey}" name="query" type="search" placeholder="Start typing a title..." autocomplete="off" minlength="2"><p class="search-status" data-search-status="${categoryKey}" aria-live="polite">Search the live catalog by title.</p><div class="search-results" data-search-results="${categoryKey}"></div></form>
     </section>
     ${importSectionMarkup(categoryKey, category)}
     <section class="section"><div class="section-heading"><div><p class="eyebrow">Your list</p><h2>${entries.length ? 'In your watch history' : 'Start your watch history'}</h2></div><span class="category-label">${entries.length} tracked</span></div>
-      ${entries.length ? `<div class="history-list">${entries.map((entry) => historyRow({ ...entry, categoryKey, category })).join('')}</div>` : `<div class="empty-state"><h3>No ${category.label.toLowerCase()} here yet</h3><p>Your ${category.label.toLowerCase()} watch history will appear here.</p></div>`}
+      ${entries.length ? `<div class="poster-grid watched-grid">${entries.map((entry) => watchedCard({ ...entry, categoryKey, category })).join('')}</div>` : `<div class="empty-state"><h3>No ${category.label.toLowerCase()} here yet</h3><p>Your ${category.label.toLowerCase()} watch history will appear here.</p></div>`}
     </section>
   </main><footer class="footer">Your watch history stays in this browser.</footer>`;
 }
@@ -821,6 +840,8 @@ function render() {
       render();
     }
   }));
+
+  root.querySelectorAll('[data-remove-history]').forEach((button) => button.addEventListener('click', () => removeFromHistory(button.dataset.removeHistory)));
 
   root.querySelectorAll('[data-remove-someday]').forEach((button) => button.addEventListener('click', () => {
     const someday = readSomeday();

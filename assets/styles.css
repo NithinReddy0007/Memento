@@ -235,6 +235,12 @@ h1 { margin-bottom: 0; font-family: var(--serif); font-size: clamp(34px, 5vw, 53
 .detail-people ul { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }
 .detail-people li { display: flex; flex-wrap: wrap; gap: 4px 9px; color: var(--ink); font-size: 11px; }
 .detail-people li span { color: var(--muted); }
+.watched-grid { justify-items: stretch; }
+.watched-grid .poster-card { width: 100%; }
+.watched-card .poster-remove:hover, .watched-card .poster-remove:focus-visible { border-color: #b3402f; background: #b3402f; color: #fff; }
+.watched-card .status-select { width: 100%; max-width: none; margin-top: 9px; }
+.hero-import-link { margin-top: 16px; padding: 0 16px; text-decoration: none; }
+.import-section { scroll-margin-top: 90px; }
 .import-form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; }
 .import-form input[type="file"] { max-width: 100%; padding: 8px; border: 1px solid var(--line); background: var(--white); color: var(--ink); font: inherit; font-size: 13px; }
 .import-form .search-status { flex-basis: 100%; margin: 0; }
