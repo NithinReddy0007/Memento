@@ -218,6 +218,26 @@ function selectPlayableTrailer(videos) {
   return candidates[0] || null;
 }
 
+function buildCast(rawCast) {
+  const seen = new Set();
+  return (Array.isArray(rawCast) ? rawCast : [])
+    .filter((person) => person?.id && person.name)
+    .sort((first, second) => (first.order ?? 9999) - (second.order ?? 9999))
+    .filter((person) => !seen.has(person.id) && seen.add(person.id))
+    .slice(0, 20)
+    .map((person, index) => {
+      const character = String(person.character || '').replace(/\s*\(voice\)/gi, '').trim();
+      return {
+        id: String(person.id),
+        name: person.name,
+        character,
+        role: character,
+        image: person.profile_path ? `https://image.tmdb.org/t/p/w185${person.profile_path}` : '',
+        order: person.order ?? index
+      };
+    });
+}
+
 async function loadTitleDetails(category, id, mediaType) {
   const allowedMediaTypes = category === 'anime' ? ['tv', 'movie']
     : category === 'movies' || category === 'documentaries' ? ['movie']
@@ -272,7 +292,7 @@ async function loadTitleDetails(category, id, mediaType) {
     originCountries: details.origin_country || (details.production_countries || []).map((country) => country.iso_3166_1),
     productionCompanies: (details.production_companies || []).map((company) => company.name),
     keyPeople,
-    cast: (details.credits?.cast || []).slice(0, 6).map((person) => ({ name: person.name, role: person.character || '' })),
+    cast: buildCast(details.credits?.cast),
     keywords: keywords.slice(0, 10).map((keyword) => keyword.name),
     tmdbRating: Number.isFinite(Number(details.vote_average)) ? Number(details.vote_average) : null,
     tmdbVoteCount: details.vote_count || 0,
@@ -362,6 +382,71 @@ async function searchCategory(category, query) {
       .map((item) => normalizeItem(item, category, mediaType));
   }));
   return responses.flat().sort((a, b) => b.popularity - a.popularity).slice(0, 8);
+}
+
+const importBatchLimit = 20;
+
+function comparableTitle(value) {
+  return normalizedTitle(String(value || '').replace(/&/g, ' and ').replace(/^\s*(the|a|an)\s+/i, ''));
+}
+
+function releaseYear(item) {
+  return Number(String(item.release_date || item.first_air_date || '').slice(0, 4)) || 0;
+}
+
+function evaluateImportCandidates(candidates, wanted, year) {
+  const titleMatches = candidates.filter(({ item }) => [item.title, item.name, item.original_title, item.original_name]
+    .some((name) => comparableTitle(name) === wanted));
+  const yearMatches = year ? titleMatches.filter(({ item }) => Math.abs(releaseYear(item) - year) <= 1) : titleMatches;
+  const withPoster = yearMatches.filter(({ item }) => item.poster_path);
+  withPoster.sort((first, second) => {
+    if (year) {
+      const distance = Math.abs(releaseYear(first.item) - year) - Math.abs(releaseYear(second.item) - year);
+      if (distance) return distance;
+    }
+    return (second.item.popularity || 0) - (first.item.popularity || 0);
+  });
+  const reason = !titleMatches.length
+    ? 'No verified match in the catalog'
+    : !yearMatches.length ? 'Release year did not match' : 'No poster available';
+  return { match: withPoster[0], reason };
+}
+
+async function findVerifiedMatch(category, title, year) {
+  const wanted = comparableTitle(title);
+  if (!wanted) return { status: 'not_found', reason: 'Not a valid title' };
+  const mediaTypes = category === 'anime' ? ['tv', 'movie'] : [category === 'tv-shows' ? 'tv' : 'movie'];
+  const collect = async (useYear) => (await Promise.all(mediaTypes.map(async (mediaType) => {
+    const params = { query: title, include_adult: false, page: 1 };
+    if (useYear && year) params[mediaType === 'tv' ? 'first_air_date_year' : 'year'] = year;
+    const data = await tmdbRequest(`search/${mediaType}`, params);
+    return (data.results || [])
+      .filter((item) => belongsToCategory(item, category, mediaType))
+      .map((item) => ({ item, mediaType }));
+  }))).flat();
+
+  let outcome = evaluateImportCandidates(await collect(true), wanted, year);
+  if (!outcome.match && year) outcome = evaluateImportCandidates(await collect(false), wanted, year);
+  if (!outcome.match) return { status: 'not_found', reason: outcome.reason };
+  return { status: 'matched', item: normalizeItem(outcome.match.item, category, outcome.match.mediaType) };
+}
+
+async function matchImportTitles(category, entries) {
+  const results = new Array(entries.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < entries.length) {
+      const index = next;
+      next += 1;
+      try {
+        results[index] = await findVerifiedMatch(category, entries[index].title, entries[index].year);
+      } catch {
+        results[index] = { status: 'error', reason: 'Could not be checked, try again' };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, entries.length) }, worker));
+  return results;
 }
 
 function discoverParams(category, page, history) {
@@ -567,6 +652,20 @@ async function handleApi(request, response, url) {
         return sendJson(response, 400, { error: 'Choose a category and enter a title of at least two characters.' });
       }
       return sendJson(response, 200, { items: await searchCategory(category, query) });
+    }
+    if (request.method === 'POST' && url.pathname === '/api/import/match') {
+      const body = await readJson(request);
+      if (!categoryKeys.has(body.category) || !Array.isArray(body.titles) || !body.titles.length || body.titles.length > importBatchLimit) {
+        return sendJson(response, 400, { error: `Choose a category and send between 1 and ${importBatchLimit} titles.` });
+      }
+      const currentYear = new Date().getFullYear();
+      const entries = body.titles.map((entry) => {
+        const title = String(entry?.title || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+        const year = Number.parseInt(entry?.year, 10);
+        return { title, year: year >= 1870 && year <= currentYear + 1 ? year : undefined };
+      });
+      const results = await matchImportTitles(body.category, entries);
+      return sendJson(response, 200, { results });
     }
     if (request.method === 'POST' && url.pathname === '/api/recommendations') {
       const body = await readJson(request);

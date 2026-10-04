@@ -414,6 +414,54 @@ function detailsMarkup() {
   return `${navMarkup('')}<main class="main"><div class="content-details" data-content-details><p class="details-loading" role="status">Loading content details...</p></div></main>`;
 }
 
+const castPreviewCount = 10;
+
+function castInitials(name) {
+  return String(name || '').split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '?';
+}
+
+function castCardMarkup(person, hidden) {
+  const photo = person.image
+    ? `<img src="${escapeHTML(person.image)}" alt="${escapeHTML(person.name)}" loading="lazy" width="185" height="231">`
+    : `<span class="cast-fallback" aria-hidden="true">${escapeHTML(castInitials(person.name))}</span>`;
+  return `<li class="cast-card"${hidden ? ' hidden' : ''}>
+    <div class="cast-photo">${photo}</div>
+    <strong class="cast-name">${escapeHTML(person.name)}</strong>
+    ${person.character ? `<span class="cast-character">${escapeHTML(person.character)}</span>` : ''}
+  </li>`;
+}
+
+function castMarkup(detail) {
+  const cast = (detail.cast || []).filter((person) => person?.name);
+  if (!cast.length) return '';
+  return `<section class="detail-cast" aria-labelledby="cast-heading">
+    <h2 id="cast-heading">Cast</h2>
+    <ul class="cast-grid">${cast.map((person, index) => castCardMarkup(person, index >= castPreviewCount)).join('')}</ul>
+    ${cast.length > castPreviewCount ? `<button class="cast-toggle" type="button" data-cast-toggle aria-expanded="false">Show all ${cast.length}</button>` : ''}
+  </section>`;
+}
+
+function wireCastSection(container) {
+  container.querySelectorAll('.cast-photo img').forEach((image) => {
+    image.addEventListener('error', () => {
+      const fallback = document.createElement('span');
+      fallback.className = 'cast-fallback';
+      fallback.setAttribute('aria-hidden', 'true');
+      fallback.textContent = castInitials(image.alt);
+      image.replaceWith(fallback);
+    }, { once: true });
+  });
+  const toggle = container.querySelector('[data-cast-toggle]');
+  toggle?.addEventListener('click', () => {
+    const expanded = toggle.getAttribute('aria-expanded') === 'true';
+    container.querySelectorAll('.cast-card').forEach((card, index) => {
+      card.hidden = !expanded ? false : index >= castPreviewCount;
+    });
+    toggle.setAttribute('aria-expanded', String(!expanded));
+    toggle.textContent = expanded ? `Show all ${container.querySelectorAll('.cast-card').length}` : 'Show fewer';
+  });
+}
+
 function detailsContentMarkup(detail) {
   const categoryLabel = categories[detail.category]?.label || 'Title';
   const runtime = detail.runtime ? `${detail.runtime} min` : detail.episodeRuntime?.length ? `${detail.episodeRuntime[0]} min per episode` : '';
@@ -446,7 +494,7 @@ function detailsContentMarkup(detail) {
       <div class="detail-ratings"><div class="detail-rating"><span>IMDb</span><strong class="${Number.isFinite(detail.imdbRating) ? '' : 'is-unavailable'}">${imdbValue}</strong>${detail.imdbVotes ? `<small>${escapeHTML(detail.imdbVotes)} votes</small>` : ''}</div>${Number.isFinite(detail.tmdbRating) ? `<div class="detail-rating"><span>TMDB</span><strong>${detail.tmdbRating.toFixed(1)} / 10</strong></div>` : ''}</div>
       <section class="detail-synopsis"><h2>Synopsis</h2><p>${detail.overview ? escapeHTML(detail.overview) : 'Synopsis unavailable from the content catalog.'}</p>${detail.extendedSynopsis && detail.extendedSynopsis !== detail.overview ? `<details class="extended-plot"><summary>Expanded plot (may contain spoilers)</summary><p>${escapeHTML(detail.extendedSynopsis)}</p></details>` : ''}</section>
       ${trailerMarkup(detail)}
-      ${detail.cast?.length ? `<section class="detail-people"><h2>Featuring</h2><ul>${detail.cast.map((person) => `<li><strong>${escapeHTML(person.name)}</strong>${person.role ? `<span>${escapeHTML(person.role)}</span>` : ''}</li>`).join('')}</ul></section>` : ''}
+      ${castMarkup(detail)}
       ${detail.keywords?.length ? `<section class="detail-keywords"><h2>Topics</h2><div>${detail.keywords.map((keyword) => `<span>${escapeHTML(keyword)}</span>`).join('')}</div></section>` : ''}
       ${facts.length ? `<dl class="detail-facts">${facts.map(([label, value]) => `<div><dt>${escapeHTML(label)}</dt><dd>${escapeHTML(value)}</dd></div>`).join('')}</dl>` : ''}
       ${detail.imdbId ? `<a class="detail-external-link" href="https://www.imdb.com/title/${encodeURIComponent(detail.imdbId)}/" target="_blank" rel="noreferrer">View on IMDb</a>` : ''}
@@ -492,6 +540,7 @@ async function loadContentDetails() {
     }
     if (trailerResponse?.available) details.trailer = trailerResponse.trailer;
     container.innerHTML = detailsContentMarkup(details);
+    wireCastSection(container);
     document.title = `${details.title} | Memento`;
     if (window.location.hash === '#trailer') {
       requestAnimationFrame(() => {
@@ -505,6 +554,121 @@ async function loadContentDetails() {
   }
 }
 
+const importBatchSize = 10;
+const importMaxTitles = 300;
+const importMaxBytes = 200 * 1024;
+const importSummaries = {};
+
+function parseImportList(text) {
+  const seen = new Set();
+  const entries = [];
+  let truncated = false;
+  text.replace(/^\uFEFF/, '').split(/\r?\n/).forEach((line) => {
+    let title = line.trim();
+    if (!title || title.startsWith('#')) return;
+    title = title.replace(/^(?:\d{1,3}[.)]|[-*•])\s+/, '').trim();
+    let year;
+    const yearMatch = title.match(/^(.*\S)\s*(?:[(\[]\s*((?:19|20)\d{2})\s*[)\]]|[-–,]\s+((?:19|20)\d{2}))$/);
+    if (yearMatch) {
+      title = yearMatch[1].trim();
+      year = Number(yearMatch[2] || yearMatch[3]);
+    }
+    title = title.replace(/\s+/g, ' ');
+    if (!title) return;
+    const dedupeKey = `${title.toLowerCase()}|${year || ''}`;
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+    if (entries.length >= importMaxTitles) {
+      truncated = true;
+      return;
+    }
+    entries.push({ raw: line.trim(), title, year });
+  });
+  return { entries, truncated };
+}
+
+function importSectionMarkup(categoryKey, category) {
+  const summary = importSummaries[categoryKey];
+  const summaryMarkup = summary ? `<div class="import-summary" role="status">
+    <p><strong>${summary.added}</strong> added${summary.existing ? ` · ${summary.existing} already in history` : ''}${summary.unverified.length ? ` · ${summary.unverified.length} not added` : ''}${summary.truncated ? ` · only the first ${importMaxTitles} titles were read` : ''}</p>
+    ${summary.unverified.length ? `<details class="import-skipped"><summary>Not added</summary><ul>${summary.unverified.map((entry) => `<li><span>${escapeHTML(entry.input)}</span><em>${escapeHTML(entry.reason)}</em></li>`).join('')}</ul></details>` : ''}
+  </div>` : '';
+  return `<section class="section import-section"><div class="section-heading"><div><p class="eyebrow">Already watched</p><h2>Import ${category.label.toLowerCase()} from a .txt file</h2></div></div>
+    <form class="import-form" data-import-form="${categoryKey}">
+      <input id="import-${categoryKey}" name="file" type="file" accept=".txt,text/plain" aria-label="Choose a .txt file of watched ${category.label.toLowerCase()}">
+      <button class="button-dark" type="submit" disabled>Import</button>
+      <p class="search-status" data-import-status aria-live="polite">One title per line. Each title is verified before it is added.</p>
+    </form>${summaryMarkup}
+  </section>`;
+}
+
+async function runImport(form) {
+  const categoryKey = form.dataset.importForm;
+  const input = form.querySelector('input[type="file"]');
+  const submit = form.querySelector('button[type="submit"]');
+  const status = form.querySelector('[data-import-status]');
+  const file = input.files?.[0];
+  if (!file) return;
+  if (file.size > importMaxBytes) {
+    status.textContent = 'That file is too large. Keep it under 200 KB.';
+    return;
+  }
+  input.disabled = true;
+  submit.disabled = true;
+  try {
+    const { entries, truncated } = parseImportList(await file.text());
+    if (!entries.length) {
+      status.textContent = 'No titles were found in that file.';
+      input.disabled = false;
+      submit.disabled = false;
+      return;
+    }
+    const matched = [];
+    const unverified = [];
+    for (let start = 0; start < entries.length; start += importBatchSize) {
+      const batch = entries.slice(start, start + importBatchSize);
+      status.textContent = `Verifying ${Math.min(start + importBatchSize, entries.length)} of ${entries.length}...`;
+      try {
+        const data = await backendRequest('/api/import/match', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category: categoryKey, titles: batch.map(({ title, year }) => ({ title, year })) })
+        });
+        batch.forEach((entry, index) => {
+          const result = data.results?.[index];
+          if (result?.status === 'matched' && result.item) matched.push(result.item);
+          else unverified.push({ input: entry.raw, reason: result?.reason || 'Could not be checked, try again' });
+        });
+      } catch {
+        batch.forEach((entry) => unverified.push({ input: entry.raw, reason: 'Could not be checked, try again' }));
+      }
+    }
+    const history = readHistory();
+    const seen = new Set();
+    const baseTime = Date.now();
+    let added = 0;
+    let existing = 0;
+    matched.forEach((item, index) => {
+      const key = historyKey(categoryKey, item);
+      if (seen.has(key)) return;
+      seen.add(key);
+      if (history[key]) {
+        existing += 1;
+        return;
+      }
+      history[key] = { category: categoryKey, status: 'completed', updatedAt: baseTime - index, item };
+      added += 1;
+    });
+    if (added) writeHistory(history);
+    importSummaries[categoryKey] = { added, existing, unverified, truncated };
+    render();
+  } catch (error) {
+    status.textContent = error.message || 'The file could not be imported.';
+    input.disabled = false;
+    submit.disabled = !input.files?.length;
+  }
+}
+
 function categoryMarkup(categoryKey, history) {
   const category = categories[categoryKey];
   const entries = getEntries(history, categoryKey);
@@ -513,6 +677,7 @@ function categoryMarkup(categoryKey, history) {
     <section class="section add-title-section"><div class="section-heading"><div><p class="eyebrow">Find something to track</p><h2>Search ${category.label.toLowerCase()}</h2></div></div>
       <form class="title-search" data-title-search="${categoryKey}"><label for="search-${categoryKey}">Title</label><input id="search-${categoryKey}" name="query" type="search" placeholder="Start typing a title..." autocomplete="off" minlength="2"><p class="search-status" data-search-status="${categoryKey}" aria-live="polite">Search the live catalog by title.</p><div class="search-results" data-search-results="${categoryKey}"></div></form>
     </section>
+    ${importSectionMarkup(categoryKey, category)}
     <section class="section"><div class="section-heading"><div><p class="eyebrow">Your list</p><h2>${entries.length ? 'In your watch history' : 'Start your watch history'}</h2></div><span class="category-label">${entries.length} tracked</span></div>
       ${entries.length ? `<div class="history-list">${entries.map((entry) => historyRow({ ...entry, categoryKey, category })).join('')}</div>` : `<div class="empty-state"><h3>No ${category.label.toLowerCase()} here yet</h3><p>Your ${category.label.toLowerCase()} watch history will appear here.</p></div>`}
     </section>
@@ -622,6 +787,21 @@ function render() {
       searchDebounce = setTimeout(() => runSearch(form, query), 300);
     });
     form.addEventListener('submit', (event) => event.preventDefault());
+  });
+
+  root.querySelectorAll('[data-import-form]').forEach((form) => {
+    const input = form.querySelector('input[type="file"]');
+    const submit = form.querySelector('button[type="submit"]');
+    const status = form.querySelector('[data-import-status]');
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      submit.disabled = !file;
+      if (file) status.textContent = `${file.name} selected.`;
+    });
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      void runImport(form);
+    });
   });
 
   root.querySelectorAll('[data-refresh]').forEach((button) => button.addEventListener('click', () => {
