@@ -119,8 +119,9 @@ function backendBaseUrl() {
 
 async function backendRequest(path, options = {}) {
   const isGet = !options.method || options.method.toUpperCase() === 'GET';
+  const isTrending = path.includes('/api/trending');
   const cacheKey = `memento.api.cache:${path}`;
-  if (isGet) {
+  if (isGet && !isTrending) {
     if (apiMemoryCache.has(path)) {
       const entry = apiMemoryCache.get(path);
       if (Date.now() - entry.time < 5 * 60 * 1000) return entry.data;
@@ -327,17 +328,20 @@ async function loadTrendingHero() {
   const heroContainer = document.querySelector('[data-netflix-hero-container]');
   if (!heroContainer) return;
   try {
-    const data = await backendRequest('/api/trending');
-    trendingItems = data.items || [];
-    if (!trendingItems.length) return;
+    const data = await backendRequest('/api/trending?t=' + Date.now());
+    let list = data.items || [];
+    if (!list.length) return;
+    // Client-side shuffle to guarantee fresh random order on every load
+    trendingItems = list.slice().sort(() => Math.random() - 0.5);
     renderNetflixHero(0);
     // User requested: do NOT automatically change itself
   } catch (err) {
     // Fallback: try cinematic feed item for hero
     try {
       const feed = await backendRequest('/api/cinematic-feed?page=1');
-      trendingItems = feed.items || [];
-      if (trendingItems.length) {
+      let fallbackList = feed.items || [];
+      if (fallbackList.length) {
+        trendingItems = fallbackList.slice().sort(() => Math.random() - 0.5);
         renderNetflixHero(0);
       }
     } catch {}

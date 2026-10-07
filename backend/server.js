@@ -597,30 +597,33 @@ async function loadCinematicFeed(page = 1) {
 }
 
 async function loadTrendingFeed() {
-  if (trendingFeedCache.has('all')) return trendingFeedCache.get('all');
   try {
+    // Pick random pages (1 to 5) so results vary dynamically on every refresh
+    const randomPage = () => Math.floor(Math.random() * 5) + 1;
     const [trendingMovies, trendingTv, animeResults, docResults] = await Promise.all([
-      tmdbRequest('trending/movie/day', { page: 1 }),
-      tmdbRequest('trending/tv/day', { page: 1 }),
+      tmdbRequest('trending/movie/week', { page: randomPage() }),
+      tmdbRequest('trending/tv/week', { page: randomPage() }),
       tmdbRequest('discover/tv', {
-        page: 1, sort_by: 'popularity.desc', with_genres: 16, with_origin_country: 'JP',
-        'vote_count.gte': 40, include_adult: false
+        page: randomPage(), sort_by: 'popularity.desc', with_genres: 16, with_origin_country: 'JP',
+        'vote_count.gte': 30, include_adult: false
       }),
       tmdbRequest('discover/movie', {
-        page: 1, sort_by: 'popularity.desc', with_genres: 99,
-        'vote_count.gte': 30, include_adult: false
+        page: randomPage(), sort_by: 'popularity.desc', with_genres: 99,
+        'vote_count.gte': 20, include_adult: false
       })
     ]);
 
     const seen = new Set();
+    const shuffleArray = (arr) => arr.slice().sort(() => Math.random() - 0.5);
+
     const categoriesMap = {
-      'movies': (trendingMovies.results || []).filter(i => i.backdrop_path).map(i => ({ ...i, media_type: 'movie', cat: 'movies' })),
-      'tv-shows': (trendingTv.results || []).filter(i => i.backdrop_path && !((i.genre_ids || []).includes(16) && (i.original_language === 'ja' || (i.origin_country || []).includes('JP')))).map(i => ({ ...i, media_type: 'tv', cat: 'tv-shows' })),
-      'anime': (animeResults.results || []).filter(i => i.backdrop_path).map(i => ({ ...i, media_type: 'tv', cat: 'anime' })),
-      'documentaries': (docResults.results || []).filter(i => i.backdrop_path).map(i => ({ ...i, media_type: 'movie', cat: 'documentaries' }))
+      'movies': shuffleArray((trendingMovies.results || []).filter(i => i.backdrop_path)).map(i => ({ ...i, media_type: 'movie', cat: 'movies' })),
+      'tv-shows': shuffleArray((trendingTv.results || []).filter(i => i.backdrop_path && !((i.genre_ids || []).includes(16) && (i.original_language === 'ja' || (i.origin_country || []).includes('JP'))))).map(i => ({ ...i, media_type: 'tv', cat: 'tv-shows' })),
+      'anime': shuffleArray((animeResults.results || []).filter(i => i.backdrop_path)).map(i => ({ ...i, media_type: 'tv', cat: 'anime' })),
+      'documentaries': shuffleArray((docResults.results || []).filter(i => i.backdrop_path)).map(i => ({ ...i, media_type: 'movie', cat: 'documentaries' }))
     };
 
-    // Pick evenly across categories (2 movies, 2 tv shows, 2 anime, 2 documentaries = 8 items)
+    // Pick 2 random items from each category (2 movies, 2 tv shows, 2 anime, 2 documentaries = 8 total)
     const selected = [];
     const catKeys = ['movies', 'tv-shows', 'anime', 'documentaries'];
     for (let round = 0; round < 2; round++) {
@@ -638,8 +641,11 @@ async function loadTrendingFeed() {
       }
     }
 
-    // Attach trailers to all 8 items for fast, seamless preview playback
-    const enriched = await Promise.all(selected.slice(0, 8).map(async (item) => {
+    // Shuffle the final 8 items so different media types appear in random order
+    const randomizedList = shuffleArray(selected).slice(0, 8);
+
+    // Attach trailers to items for background video playback
+    const enriched = await Promise.all(randomizedList.map(async (item) => {
       try {
         const trailer = await loadTitleTrailer(item);
         return { ...item, trailer };
@@ -648,13 +654,7 @@ async function loadTrendingFeed() {
       }
     }));
 
-    const result = {
-      items: enriched
-    };
-    trendingFeedCache.set('all', result);
-    // Cache for 15 minutes
-    setTimeout(() => trendingFeedCache.delete('all'), 15 * 60 * 1000);
-    return result;
+    return { items: enriched };
   } catch (error) {
     throw error;
   }
