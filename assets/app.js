@@ -256,7 +256,7 @@ function netflixHeroMarkup(item, index = 0, total = 1) {
   const categoryLabel = item.category === 'tv-shows' ? 'TV Series' : item.category === 'anime' ? 'Anime' : item.category === 'documentaries' ? 'Documentary' : 'Movie';
   const genres = (item.tags || []).slice(0, 3).join(' • ');
 
-  const dots = Array.from({ length: Math.min(total, 6) }).map((_, i) =>
+  const dots = Array.from({ length: Math.min(total, 8) }).map((_, i) =>
     `<button class="netflix-dot ${i === index ? 'is-active' : ''}" type="button" data-hero-dot="${i}" aria-label="Slide ${i + 1}"></button>`
   ).join('');
 
@@ -331,7 +331,7 @@ async function loadTrendingHero() {
     trendingItems = data.items || [];
     if (!trendingItems.length) return;
     renderNetflixHero(0);
-    startHeroCycleTimer();
+    // User requested: do NOT automatically change itself
   } catch (err) {
     // Fallback: try cinematic feed item for hero
     try {
@@ -339,7 +339,6 @@ async function loadTrendingHero() {
       trendingItems = feed.items || [];
       if (trendingItems.length) {
         renderNetflixHero(0);
-        startHeroCycleTimer();
       }
     } catch {}
   }
@@ -356,12 +355,9 @@ function renderNetflixHero(index) {
 }
 
 function startHeroCycleTimer() {
+  // Disabled per user request: "i dont want it to change itself"
   if (trendingHeroTimer) clearInterval(trendingHeroTimer);
-  trendingHeroTimer = setInterval(() => {
-    if (trendingItems.length > 1) {
-      renderNetflixHero(trendingActiveIndex + 1);
-    }
-  }, 14000);
+  trendingHeroTimer = null;
 }
 
 async function playHeroVideo(item) {

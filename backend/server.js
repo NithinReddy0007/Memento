@@ -599,39 +599,47 @@ async function loadCinematicFeed(page = 1) {
 async function loadTrendingFeed() {
   if (trendingFeedCache.has('all')) return trendingFeedCache.get('all');
   try {
-    const [trendingAll, trendingTv, moviesPopular] = await Promise.all([
-      tmdbRequest('trending/all/day', { page: 1 }),
+    const [trendingMovies, trendingTv, animeResults, docResults] = await Promise.all([
+      tmdbRequest('trending/movie/day', { page: 1 }),
       tmdbRequest('trending/tv/day', { page: 1 }),
-      tmdbRequest('trending/movie/day', { page: 1 })
+      tmdbRequest('discover/tv', {
+        page: 1, sort_by: 'popularity.desc', with_genres: 16, with_origin_country: 'JP',
+        'vote_count.gte': 40, include_adult: false
+      }),
+      tmdbRequest('discover/movie', {
+        page: 1, sort_by: 'popularity.desc', with_genres: 99,
+        'vote_count.gte': 30, include_adult: false
+      })
     ]);
 
     const seen = new Set();
-    const rawList = [
-      ...(trendingAll.results || []),
-      ...(trendingTv.results || []),
-      ...(moviesPopular.results || [])
-    ];
+    const categoriesMap = {
+      'movies': (trendingMovies.results || []).filter(i => i.backdrop_path).map(i => ({ ...i, media_type: 'movie', cat: 'movies' })),
+      'tv-shows': (trendingTv.results || []).filter(i => i.backdrop_path && !((i.genre_ids || []).includes(16) && (i.original_language === 'ja' || (i.origin_country || []).includes('JP')))).map(i => ({ ...i, media_type: 'tv', cat: 'tv-shows' })),
+      'anime': (animeResults.results || []).filter(i => i.backdrop_path).map(i => ({ ...i, media_type: 'tv', cat: 'anime' })),
+      'documentaries': (docResults.results || []).filter(i => i.backdrop_path).map(i => ({ ...i, media_type: 'movie', cat: 'documentaries' }))
+    };
 
-    const items = [];
-    for (const item of rawList) {
-      if (!item || !item.id || !item.backdrop_path) continue;
-      const mediaType = item.media_type || (item.first_air_date ? 'tv' : 'movie');
-      if (mediaType !== 'tv' && mediaType !== 'movie') continue;
-      const key = `${mediaType}:${item.id}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      let category = 'movies';
-      if (belongsToCategory(item, 'anime', mediaType)) category = 'anime';
-      else if (belongsToCategory(item, 'documentaries', mediaType)) category = 'documentaries';
-      else if (mediaType === 'tv') category = 'tv-shows';
-
-      items.push(normalizeItem(item, category, mediaType));
-      if (items.length >= 10) break;
+    // Pick evenly across categories (2 movies, 2 tv shows, 2 anime, 2 documentaries = 8 items)
+    const selected = [];
+    const catKeys = ['movies', 'tv-shows', 'anime', 'documentaries'];
+    for (let round = 0; round < 2; round++) {
+      for (const cat of catKeys) {
+        const pool = categoriesMap[cat];
+        while (pool.length > 0) {
+          const candidate = pool.shift();
+          const key = `${candidate.media_type}:${candidate.id}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            selected.push(normalizeItem(candidate, cat, candidate.media_type));
+            break;
+          }
+        }
+      }
     }
 
-    // Attach trailers to the top 5 trending items for instant background video playback
-    const enriched = await Promise.all(items.slice(0, 6).map(async (item) => {
+    // Attach trailers to all 8 items for fast, seamless preview playback
+    const enriched = await Promise.all(selected.slice(0, 8).map(async (item) => {
       try {
         const trailer = await loadTitleTrailer(item);
         return { ...item, trailer };
@@ -641,11 +649,11 @@ async function loadTrendingFeed() {
     }));
 
     const result = {
-      items: [...enriched, ...items.slice(6)]
+      items: enriched
     };
     trendingFeedCache.set('all', result);
-    // Cache for 30 minutes
-    setTimeout(() => trendingFeedCache.delete('all'), 30 * 60 * 1000);
+    // Cache for 15 minutes
+    setTimeout(() => trendingFeedCache.delete('all'), 15 * 60 * 1000);
     return result;
   } catch (error) {
     throw error;
