@@ -971,16 +971,57 @@ function renderDashboardPeopleList(people, label, listId) {
     return `<div style="padding:24px;text-align:center;color:var(--muted);font-size:12.5px">No ${label.toLowerCase()} found in this viewing selection.</div>`;
   }
   const INITIAL_COUNT = 8;
-  const medals = ['🥇', '🥈', '🥉'];
   const maxCount = people[0]?.count || 1;
 
-  const rows = people.map((person, idx) => {
-    const rank = idx + 1;
-    const rankLabel = rank <= 3 ? medals[idx] : `#${rank}`;
+  // Podium for top 3 (if at least 1 person exists)
+  // Podium visual order: 2nd (left), 1st (center, tallest), 3rd (right)
+  const top1 = people[0] || null;
+  const top2 = people[1] || null;
+  const top3 = people[2] || null;
+
+  const renderPodiumStep = (person, rank, stepClass) => {
+    if (!person) return `<div class="analysis-podium-step ${stepClass} is-empty"></div>`;
+    return `
+      <div class="analysis-podium-step ${stepClass}">
+        <div class="analysis-podium-avatar-wrap">
+          <div class="analysis-podium-crown">#${rank}</div>
+          <div class="analysis-podium-avatar">
+            ${person.image
+              ? `<img src="${escapeHTML(person.image)}" alt="${escapeHTML(person.name)}" loading="lazy">`
+              : `<div class="analysis-podium-initials">${escapeHTML(castInitials(person.name))}</div>`}
+          </div>
+        </div>
+        <div class="analysis-podium-info">
+          <span class="analysis-podium-name" title="${escapeHTML(person.name)}">${escapeHTML(person.name)}</span>
+          <span class="analysis-podium-score">${person.count} <small>${person.count === 1 ? 'title' : 'titles'}</small></span>
+        </div>
+        <div class="analysis-podium-pillar">
+          <span class="analysis-podium-rank-tag">RANK ${rank}</span>
+        </div>
+      </div>
+    `;
+  };
+
+  const podiumMarkup = `
+    <div class="analysis-podium-stage">
+      ${renderPodiumStep(top2, 2, 'podium-rank-2')}
+      ${renderPodiumStep(top1, 1, 'podium-rank-1')}
+      ${renderPodiumStep(top3, 3, 'podium-rank-3')}
+    </div>
+  `;
+
+  // The rest of the leaderboard starting from position 4 onwards
+  const remainingPeople = people.slice(3);
+  if (!remainingPeople.length) {
+    return `<div class="analysis-people-container" id="lb-${listId}">${podiumMarkup}</div>`;
+  }
+
+  const rows = remainingPeople.map((person, subIdx) => {
+    const rank = subIdx + 4;
     const pct = Math.round((person.count / maxCount) * 100);
-    const isHidden = idx >= INITIAL_COUNT;
+    const isHidden = (subIdx + 3) >= INITIAL_COUNT;
     return `<div class="analysis-lb-row ${isHidden ? 'lb-hidden' : ''}" ${isHidden ? `data-lb-extra="${listId}"` : ''}>
-      <div class="analysis-lb-rank ${rank <= 3 ? 'lb-medal' : ''}">${rankLabel}</div>
+      <div class="analysis-lb-rank">#${rank}</div>
       <div class="analysis-lb-avatar">
         ${person.image
           ? `<img src="${escapeHTML(person.image)}" alt="${escapeHTML(person.name)}" loading="lazy">`
@@ -1007,7 +1048,14 @@ function renderDashboardPeopleList(people, label, listId) {
       </button>`
     : '';
 
-  return `<div class="analysis-lb-list" id="lb-${listId}">${rows}</div>${showMoreBtn}`;
+  return `<div class="analysis-people-container" id="lb-${listId}">
+    ${podiumMarkup}
+    <div class="analysis-lb-list">
+      <div class="analysis-lb-section-sub">Runner-ups & Notable Appearances</div>
+      ${rows}
+    </div>
+    ${showMoreBtn}
+  </div>`;
 }
 
 

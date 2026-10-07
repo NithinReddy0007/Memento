@@ -1804,7 +1804,7 @@ h1 {
   color: var(--amber);
 }
 
-/* Primary Metric Cards Grid (inspired by high-end financial dashboard KPI cards) */
+/* Primary Metric Cards Grid (inspired by high-end financial dashboard KPI cards with vivid colorful accents) */
 .analysis-metrics-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1813,22 +1813,52 @@ h1 {
 }
 
 .analysis-metric-card {
-  padding: 18px 20px;
+  position: relative;
+  overflow: hidden;
+  padding: 20px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  border-radius: 14px;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 12px;
-  transition: transform var(--transition-fast), border-color var(--transition-fast);
+  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.analysis-metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #ff7e5f, #feb47b);
+}
+
+.analysis-metric-card:nth-child(1)::before {
+  background: linear-gradient(90deg, #3b82f6, #06b6d4);
+}
+.analysis-metric-card:nth-child(2)::before {
+  background: linear-gradient(90deg, #ec4899, #8b5cf6);
+}
+.analysis-metric-card:nth-child(3)::before {
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
+}
+.analysis-metric-card:nth-child(4)::before {
+  background: linear-gradient(90deg, #10b981, #3b82f6);
 }
 
 .analysis-metric-card:hover {
-  border-color: rgba(232, 150, 58, 0.35);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.1);
 }
+
+.analysis-metric-card:nth-child(1):hover { border-color: rgba(59, 130, 246, 0.4); }
+.analysis-metric-card:nth-child(2):hover { border-color: rgba(236, 72, 153, 0.4); }
+.analysis-metric-card:nth-child(3):hover { border-color: rgba(245, 158, 11, 0.4); }
+.analysis-metric-card:nth-child(4):hover { border-color: rgba(16, 185, 129, 0.4); }
 
 .analysis-metric-top {
   display: flex;
@@ -1839,26 +1869,41 @@ h1 {
 
 .analysis-metric-label {
   font-size: 11.5px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: .6px;
+  letter-spacing: .8px;
 }
 
 .analysis-metric-icon-wrap {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   display: grid;
   place-items: center;
-  background: var(--hover-surface);
-  color: var(--ink);
-  font-size: 13px;
+  font-size: 15px;
+}
+
+.analysis-metric-card:nth-child(1) .analysis-metric-icon-wrap {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+.analysis-metric-card:nth-child(2) .analysis-metric-icon-wrap {
+  background: rgba(236, 72, 153, 0.15);
+  color: #ec4899;
+}
+.analysis-metric-card:nth-child(3) .analysis-metric-icon-wrap {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+.analysis-metric-card:nth-child(4) .analysis-metric-icon-wrap {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
 }
 
 .analysis-metric-value {
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 30px;
+  font-weight: 800;
   letter-spacing: -.03em;
   color: var(--ink);
   line-height: 1;
@@ -1870,6 +1915,205 @@ h1 {
   gap: 6px;
   font-size: 11.5px;
   color: var(--muted);
+}
+
+.analysis-metric-pill {
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+/* ── PODIUM DISPLAY FOR TOP 3 ACTORS/ACTRESSES ── */
+.analysis-podium-stage {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px 8px 12px;
+  margin-bottom: 20px;
+  background: radial-gradient(circle at 50% 100%, rgba(245, 158, 11, 0.08) 0%, transparent 70%);
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+
+.analysis-podium-step {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  min-width: 0;
+  max-width: 140px;
+  position: relative;
+}
+
+.analysis-podium-step.is-empty {
+  visibility: hidden;
+}
+
+.analysis-podium-avatar-wrap {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.analysis-podium-crown {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  z-index: 2;
+  letter-spacing: .5px;
+}
+
+/* 1st Place (Gold/Amber) */
+.podium-rank-1 .analysis-podium-crown {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #fff;
+}
+/* 2nd Place (Silver/Ice) */
+.podium-rank-2 .analysis-podium-crown {
+  background: linear-gradient(135deg, #94a3b8, #64748b);
+  color: #fff;
+}
+/* 3rd Place (Bronze/Rose) */
+.podium-rank-3 .analysis-podium-crown {
+  background: linear-gradient(135deg, #d97706, #b45309);
+  color: #fff;
+}
+
+.analysis-podium-avatar {
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--paper);
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: transform .2s ease;
+}
+
+.podium-rank-1 .analysis-podium-avatar {
+  width: 64px;
+  height: 64px;
+  border: 3px solid #f59e0b;
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.4);
+}
+
+.podium-rank-2 .analysis-podium-avatar {
+  width: 52px;
+  height: 52px;
+  border: 3px solid #94a3b8;
+  box-shadow: 0 0 12px rgba(148, 163, 184, 0.3);
+}
+
+.podium-rank-3 .analysis-podium-avatar {
+  width: 48px;
+  height: 48px;
+  border: 3px solid #b45309;
+  box-shadow: 0 0 12px rgba(180, 83, 9, 0.3);
+}
+
+.analysis-podium-step:hover .analysis-podium-avatar {
+  transform: scale(1.08);
+}
+
+.analysis-podium-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.analysis-podium-initials {
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.analysis-podium-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.analysis-podium-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.analysis-podium-score {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--amber);
+}
+
+.analysis-podium-score small {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* 3D-like Podium Pillars with different heights */
+.analysis-podium-pillar {
+  width: 100%;
+  border-radius: 8px 8px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.1), 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.podium-rank-1 .analysis-podium-pillar {
+  height: 72px;
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.25) 0%, rgba(245, 158, 11, 0.08) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-bottom: 0;
+}
+
+.podium-rank-2 .analysis-podium-pillar {
+  height: 52px;
+  background: linear-gradient(180deg, rgba(148, 163, 184, 0.25) 0%, rgba(148, 163, 184, 0.08) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-bottom: 0;
+}
+
+.podium-rank-3 .analysis-podium-pillar {
+  height: 38px;
+  background: linear-gradient(180deg, rgba(180, 83, 9, 0.25) 0%, rgba(180, 83, 9, 0.08) 100%);
+  border: 1px solid rgba(180, 83, 9, 0.4);
+  border-bottom: 0;
+}
+
+.analysis-podium-rank-tag {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+}
+
+.podium-rank-1 .analysis-podium-rank-tag { color: #f59e0b; }
+.podium-rank-2 .analysis-podium-rank-tag { color: #94a3b8; }
+.podium-rank-3 .analysis-podium-rank-tag { color: #b45309; }
+
+.analysis-lb-section-sub {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--muted);
+  margin: 6px 0 8px;
 }
 
 .analysis-metric-pill {
@@ -2220,8 +2464,20 @@ h1 {
 .analysis-bar-indicator {
   height: 100%;
   border-radius: 999px;
-  background: var(--amber);
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
   transition: width .6s cubic-bezier(.2,.8,.2,1);
+}
+
+.analysis-bar-item:nth-child(2n) .analysis-bar-indicator {
+  background: linear-gradient(90deg, #3b82f6, #06b6d4);
+}
+
+.analysis-bar-item:nth-child(3n) .analysis-bar-indicator {
+  background: linear-gradient(90deg, #ec4899, #8b5cf6);
+}
+
+.analysis-bar-item:nth-child(4n) .analysis-bar-indicator {
+  background: linear-gradient(90deg, #10b981, #3b82f6);
 }
 
 /* Category Duration Breakdown Table */
