@@ -834,7 +834,7 @@ function analysisMarkup(history) {
             </div>
             <span class="analysis-panel-meta">Based on actual cast appearances</span>
           </div>
-          ${renderDashboardPeopleList(topActors, 'Actors')}
+          ${renderDashboardPeopleList(topActors, 'Actors', 'actors')}
         </section>
 
         <!-- Top Actresses Panel -->
@@ -846,7 +846,7 @@ function analysisMarkup(history) {
             </div>
             <span class="analysis-panel-meta">Based on actual cast appearances</span>
           </div>
-          ${renderDashboardPeopleList(topActresses, 'Actresses')}
+          ${renderDashboardPeopleList(topActresses, 'Actresses', 'actresses')}
         </section>
       ` : ''}
 
@@ -966,52 +966,82 @@ function analysisMarkup(history) {
   </main><footer class="footer">Your watch history stays in this browser.</footer>`;
 }
 
-function renderDashboardPeopleList(people, label) {
+function renderDashboardPeopleList(people, label, listId) {
   if (!people.length) {
     return `<div style="padding:24px;text-align:center;color:var(--muted);font-size:12.5px">No ${label.toLowerCase()} found in this viewing selection.</div>`;
   }
-  return `<div class="analysis-data-table">
-    ${people.slice(0, 6).map((person, idx) => `
-      <div class="analysis-data-row">
-        <div class="analysis-data-row-left">
-          <span class="analysis-data-rank">${idx + 1}</span>
-          ${person.image ? `<img class="analysis-data-photo" src="${escapeHTML(person.image)}" alt="${escapeHTML(person.name)}" loading="lazy">` : `<div class="analysis-data-avatar-fallback">${escapeHTML(castInitials(person.name))}</div>`}
-          <div class="analysis-data-info">
-            <span class="analysis-data-name">${escapeHTML(person.name)}</span>
-            <span class="analysis-data-titles" title="${escapeHTML(person.titles.join(', '))}">
-              In: ${person.titles.slice(0, 2).map(escapeHTML).join(', ')}${person.titles.length > 2 ? ` (+${person.titles.length - 2})` : ''}
-            </span>
-          </div>
-        </div>
-        <div class="analysis-data-metric">
-          <div class="analysis-data-count">${person.count} ${person.count === 1 ? 'title' : 'titles'}</div>
-          <div class="analysis-data-sub">Watched</div>
-        </div>
+  const INITIAL_COUNT = 8;
+  const medals = ['🥇', '🥈', '🥉'];
+  const maxCount = people[0]?.count || 1;
+
+  const rows = people.map((person, idx) => {
+    const rank = idx + 1;
+    const rankLabel = rank <= 3 ? medals[idx] : `#${rank}`;
+    const pct = Math.round((person.count / maxCount) * 100);
+    const isHidden = idx >= INITIAL_COUNT;
+    return `<div class="analysis-lb-row ${isHidden ? 'lb-hidden' : ''}" ${isHidden ? `data-lb-extra="${listId}"` : ''}>
+      <div class="analysis-lb-rank ${rank <= 3 ? 'lb-medal' : ''}">${rankLabel}</div>
+      <div class="analysis-lb-avatar">
+        ${person.image
+          ? `<img src="${escapeHTML(person.image)}" alt="${escapeHTML(person.name)}" loading="lazy">`
+          : `<div class="analysis-lb-initials">${escapeHTML(castInitials(person.name))}</div>`}
       </div>
-    `).join('')}
-  </div>`;
+      <div class="analysis-lb-info">
+        <span class="analysis-lb-name">${escapeHTML(person.name)}</span>
+        <span class="analysis-lb-titles" title="${escapeHTML(person.titles.join(', '))}">
+          ${person.titles.slice(0, 2).map(escapeHTML).join(', ')}${person.titles.length > 2 ? ` +${person.titles.length - 2} more` : ''}
+        </span>
+      </div>
+      <div class="analysis-lb-metric">
+        <div class="analysis-lb-count">${person.count}</div>
+        <div class="analysis-lb-bar-wrap"><div class="analysis-lb-bar-fill" style="width:${pct}%"></div></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const hasMore = people.length > INITIAL_COUNT;
+  const showMoreBtn = hasMore
+    ? `<button class="analysis-lb-expand-btn" type="button" data-lb-toggle="${listId}" data-lb-total="${people.length}" data-lb-visible="${INITIAL_COUNT}">
+        <span class="lb-btn-text">Show ${people.length - INITIAL_COUNT} more</span>
+        <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </button>`
+    : '';
+
+  return `<div class="analysis-lb-list" id="lb-${listId}">${rows}</div>${showMoreBtn}`;
 }
+
 
 function renderDashboardGenreBars(sortedGenres) {
   if (!sortedGenres.length) {
     return `<div style="padding:24px;text-align:center;color:var(--muted);font-size:12.5px">No genre data found in this selection.</div>`;
   }
+  const INITIAL_COUNT = 8;
   const topCount = sortedGenres[0][1] || 1;
-  return `<div class="analysis-bars-stack">
-    ${sortedGenres.slice(0, 6).map(([genre, count]) => {
-      const pct = Math.round((count / topCount) * 100);
-      return `<div class="analysis-bar-item">
-        <div class="analysis-bar-top">
-          <span class="analysis-bar-title">${escapeHTML(genre)}</span>
-          <span class="analysis-bar-stat">${count} ${count === 1 ? 'title' : 'titles'}</span>
-        </div>
-        <div class="analysis-bar-rail">
-          <div class="analysis-bar-indicator" style="width:${pct}%"></div>
-        </div>
-      </div>`;
-    }).join('')}
-  </div>`;
+  const bars = sortedGenres.map(([genre, count], idx) => {
+    const pct = Math.round((count / topCount) * 100);
+    const isHidden = idx >= INITIAL_COUNT;
+    return `<div class="analysis-bar-item ${isHidden ? 'lb-hidden' : ''}" ${isHidden ? 'data-lb-extra="genres"' : ''}>
+      <div class="analysis-bar-top">
+        <span class="analysis-bar-title">${escapeHTML(genre)}</span>
+        <span class="analysis-bar-stat">${count} ${count === 1 ? 'title' : 'titles'}</span>
+      </div>
+      <div class="analysis-bar-rail">
+        <div class="analysis-bar-indicator" style="width:${pct}%"></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const hasMore = sortedGenres.length > INITIAL_COUNT;
+  const showMoreBtn = hasMore
+    ? `<button class="analysis-lb-expand-btn" type="button" data-lb-toggle="genres" data-lb-total="${sortedGenres.length}" data-lb-visible="${INITIAL_COUNT}">
+        <span class="lb-btn-text">Show ${sortedGenres.length - INITIAL_COUNT} more genres</span>
+        <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/></svg>
+      </button>`
+    : '';
+
+  return `<div class="analysis-bars-stack" id="lb-genres">${bars}</div>${showMoreBtn}`;
 }
+
 
 async function preloadAnalysisDetails(historyEntries) {
   // Preload cast & runtime details in background for titles in Watch History
@@ -1045,6 +1075,28 @@ function wireAnalysisControls() {
     btn.addEventListener('click', () => {
       analysisActiveCategory = btn.dataset.analysisCat;
       render();
+    });
+  });
+
+  // Leaderboard & Ranking Show More / Collapse toggle
+  root.querySelectorAll('[data-lb-toggle]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const targetId = btn.dataset.lbToggle;
+      const extraItems = root.querySelectorAll(`[data-lb-extra="${targetId}"]`);
+      const isExpanded = btn.classList.contains('is-expanded');
+
+      if (isExpanded) {
+        extraItems.forEach((el) => el.classList.add('lb-hidden'));
+        btn.classList.remove('is-expanded');
+        const hiddenCount = extraItems.length;
+        const textSpan = btn.querySelector('.lb-btn-text');
+        if (textSpan) textSpan.textContent = `Show ${hiddenCount} more`;
+      } else {
+        extraItems.forEach((el) => el.classList.remove('lb-hidden'));
+        btn.classList.add('is-expanded');
+        const textSpan = btn.querySelector('.lb-btn-text');
+        if (textSpan) textSpan.textContent = 'Show less';
+      }
     });
   });
 }
