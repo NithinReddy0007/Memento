@@ -70,38 +70,21 @@ function writeCollection(collectionKey, collection) {
   localStorage.removeItem(collectionKey);
 }
 
-function readHistory() {
-  return readCollection(storageKey);
-}
-
-function writeHistory(history) {
-  writeCollection(storageKey, history);
-}
-
-function readSomeday() {
-  return readCollection(somedayStorageKey);
-}
-
-function writeSomeday(someday) {
-  writeCollection(somedayStorageKey, someday);
-}
+function readHistory() { return readCollection(storageKey); }
+function writeHistory(history) { writeCollection(storageKey, history); }
+function readSomeday() { return readCollection(somedayStorageKey); }
+function writeSomeday(someday) { writeCollection(somedayStorageKey, someday); }
 
 function randomRecommendationPage(previousPage = 0) {
   let page;
-  do {
-    page = Math.floor(Math.random() * 8) + 1;
-  } while (page === previousPage);
+  do { page = Math.floor(Math.random() * 8) + 1; } while (page === previousPage);
   return page;
 }
 
 function getEntries(history, categoryKey) {
   return Object.entries(history)
     .filter(([key, entry]) => key.startsWith(`${categoryKey}:`) && entry && categories[categoryKey])
-    .map(([key, entry]) => ({
-      ...entry,
-      item: entry.item,
-      key
-    }))
+    .map(([key, entry]) => ({ ...entry, item: entry.item, key }))
     .filter((entry) => entry.item)
     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 }
@@ -144,11 +127,7 @@ async function backendRequest(path, options = {}) {
 
   const responseText = await response.text();
   let data;
-  try {
-    data = JSON.parse(responseText);
-  } catch {
-    data = undefined;
-  }
+  try { data = JSON.parse(responseText); } catch { data = undefined; }
 
   const preview = responseText.replace(/\s+/g, ' ').trim().slice(0, 240);
   if (!response.ok) {
@@ -161,7 +140,7 @@ async function backendRequest(path, options = {}) {
 }
 
 function escapeHTML(value) {
-  return String(value).replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+  return String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
 
 function appHref(relativePath) {
@@ -200,39 +179,94 @@ function imageMarkup(item, categoryKey) {
   return `<img src="${item.image || fallbackImages[categoryKey]}" data-fallback="${fallbackImages[categoryKey]}" alt="${escapeHTML(item.title)}" loading="lazy" onerror="this.onerror=null;this.src=this.dataset.fallback">`;
 }
 
+/* ── CINEMATIC CARD ── */
 function cinematicCard(item, index) {
   const key = historyKey(item.category, item);
   const detailsHref = contentDetailsHref(item.category, item);
   const rating = Number.isFinite(item.imdbRating) ? item.imdbRating : item.voteAverage;
   const ratingLabel = Number.isFinite(item.imdbRating) ? 'IMDb' : 'TMDB';
   searchResultCache.set(key, item);
-  return `<article class="cinema-card" data-cinema-key="${escapeHTML(key)}" data-cinema-category="${escapeHTML(item.category)}" data-cinema-media="${escapeHTML(item.mediaType)}" data-cinema-id="${escapeHTML(item.id)}" style="--cinema-backdrop:url('${escapeHTML(item.backdrop || item.image || '')}')">
+  return `<article class="cinema-card" style="--card-index:${index}" data-cinema-key="${escapeHTML(key)}" data-cinema-category="${escapeHTML(item.category)}" data-cinema-media="${escapeHTML(item.mediaType)}" data-cinema-id="${escapeHTML(item.id)}">
     <a class="cinema-card-link" href="${detailsHref}" aria-label="View ${escapeHTML(item.title)} details">
-      <div class="cinema-art">${item.image ? `<img src="${escapeHTML(item.image)}" alt="" loading="lazy">` : ''}<span class="cinema-teaser" data-cinema-teaser aria-hidden="true"></span><span class="cinema-vignette" aria-hidden="true"></span><span class="cinema-rank">${String(index + 1).padStart(2, '0')}</span></div>
-      <div class="cinema-card-copy"><div class="cinema-meta"><span>${escapeHTML(item.year)}</span><span>${escapeHTML(ratingLabel)} ${Number(rating || 0).toFixed(1)}</span></div><h3>${escapeHTML(item.title)}</h3><p>${escapeHTML(item.category === 'tv-shows' ? 'Series' : 'Movie')}</p></div>
+      <div class="cinema-art">
+        ${item.image ? `<img src="${escapeHTML(item.image)}" alt="" loading="lazy">` : ''}
+        <span class="cinema-teaser" data-cinema-teaser aria-hidden="true"></span>
+        <span class="cinema-vignette" aria-hidden="true"></span>
+        <span class="cinema-rank">${String(index + 1).padStart(2, '0')}</span>
+      </div>
+      <div class="cinema-card-copy">
+        <div class="cinema-meta"><span>${escapeHTML(item.year)}</span><span>${escapeHTML(ratingLabel)} ${Number(rating || 0).toFixed(1)}</span></div>
+        <h3>${escapeHTML(item.title)}</h3>
+        <p>${escapeHTML(item.category === 'tv-shows' ? 'Series' : 'Movie')}</p>
+      </div>
     </a>
-    <div class="cinema-card-actions"><button class="poster-action-button" type="button" data-cinema-history="${escapeHTML(key)}" aria-label="Add ${escapeHTML(item.title)} to Watch History">+</button><button class="poster-action-button poster-heart" type="button" data-cinema-someday="${escapeHTML(key)}" aria-label="Save ${escapeHTML(item.title)} for Someday"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"></path></svg></button></div>
+    <div class="cinema-card-actions">
+      <button class="poster-action-button" type="button" data-cinema-history="${escapeHTML(key)}" aria-label="Add ${escapeHTML(item.title)} to Watch History">+</button>
+      <button class="poster-action-button poster-heart" type="button" data-cinema-someday="${escapeHTML(key)}" aria-label="Save ${escapeHTML(item.title)} for Someday">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"></path></svg>
+      </button>
+    </div>
   </article>`;
 }
 
+/* ── CINEMATIC FEATURE / HERO ── */
 function cinematicHero(item) {
   if (!item) return '';
   const detailsHref = contentDetailsHref(item.category, item);
   const rating = Number.isFinite(item.imdbRating) ? item.imdbRating : item.voteAverage;
   return `<article class="cinema-feature" data-cinema-feature style="--feature-backdrop:url('${escapeHTML(item.backdrop || item.image || '')}')">
-    <div class="cinema-feature-copy"><p class="eyebrow">IMDb · Editor's spotlight</p><span class="cinema-feature-kicker">Top 100 · ${escapeHTML(item.category === 'tv-shows' ? 'Series' : 'Film')}</span><h2>${escapeHTML(item.title)}</h2><div class="cinema-feature-meta"><span>${escapeHTML(item.year)}</span><span>${Number(rating || 0).toFixed(1)} <b>${Number.isFinite(item.imdbRating) ? 'IMDb' : 'TMDB'}</b></span><span>${escapeHTML((item.tags || []).slice(0, 2).join(' · '))}</span></div><p>${escapeHTML(item.overview || 'A highly rated title worth remembering.')}</p><a class="button-primary" href="${detailsHref}">Explore title <span aria-hidden="true">→</span></a></div><div class="cinema-feature-art" aria-hidden="true"><img src="${escapeHTML(item.image || '')}" alt=""><span class="cinema-feature-glow"></span></div></article>`;
+    <div class="cinema-feature-copy">
+      <p class="eyebrow">IMDb · Editor's spotlight</p>
+      <span class="cinema-feature-kicker">Top 100 · ${escapeHTML(item.category === 'tv-shows' ? 'Series' : 'Film')}</span>
+      <h2>${escapeHTML(item.title)}</h2>
+      <div class="cinema-feature-meta">
+        <span>${escapeHTML(item.year)}</span>
+        <span>${Number(rating || 0).toFixed(1)} <b>${Number.isFinite(item.imdbRating) ? 'IMDb' : 'TMDB'}</b></span>
+        <span>${escapeHTML((item.tags || []).slice(0, 2).join(' · '))}</span>
+      </div>
+      <p>${escapeHTML(item.overview || 'A highly rated title worth discovering.')}</p>
+      <a class="button-primary" href="${detailsHref}">Explore title <span aria-hidden="true">→</span></a>
+    </div>
+    <div class="cinema-feature-art" aria-hidden="true">
+      <img src="${escapeHTML(item.image || '')}" alt="">
+      <span class="cinema-feature-glow"></span>
+    </div>
+  </article>`;
 }
 
+/* ── CINEMATIC FEED SHELL ── */
 function cinematicFeedMarkup() {
-  return `<section class="cinematic-section" aria-labelledby="cinematic-heading"><div class="cinematic-heading"><div><p class="eyebrow">The Memento Cinema</p><h2 id="cinematic-heading">IMDb Rated · Top 100</h2><p>Highly rated movies and series, presented like a night at the cinema.</p></div><span class="cinematic-live"><i></i> Curated from IMDb ratings</span></div><div class="cinema-feature-wrap" data-cinema-feature-wrap><div class="cinema-loading cinema-feature-skeleton"></div></div><div class="cinema-rail-heading"><strong>100 titles worth your time</strong><span>Hover to preview the exact title</span></div><div class="cinema-rail" data-cinema-feed aria-live="polite"><div class="cinema-loading cinema-card-skeleton"></div><div class="cinema-loading cinema-card-skeleton"></div><div class="cinema-loading cinema-card-skeleton"></div><div class="cinema-loading cinema-card-skeleton"></div><div class="cinema-loading cinema-card-skeleton"></div></div><button class="cinema-more" type="button" data-cinema-more hidden>Load more from the Top 100</button></section>`;
+  const skeletons = Array(6).fill('<div class="cinema-loading cinema-card-skeleton"></div>').join('');
+  return `<section class="cinematic-section" aria-labelledby="cinematic-heading">
+    <div class="cinematic-heading">
+      <div>
+        <p class="eyebrow">The Memento Cinema</p>
+        <h2 id="cinematic-heading">IMDb Rated · Top 100</h2>
+        <p>Highly rated movies and series, presented like a night at the cinema.</p>
+      </div>
+      <span class="cinematic-live"><i></i> Curated from IMDb ratings</span>
+    </div>
+    <div class="cinema-feature-wrap" data-cinema-feature-wrap>
+      <div class="cinema-loading cinema-feature-skeleton"></div>
+    </div>
+    <div class="cinema-rail-heading">
+      <strong>100 titles worth your time</strong>
+      <span>Hover a poster to preview that exact title</span>
+    </div>
+    <div class="cinema-rail" data-cinema-feed aria-live="polite">${skeletons}</div>
+    <button class="cinema-more" type="button" data-cinema-more hidden>Load more from the Top 100</button>
+  </section>`;
 }
 
+/* ── LOAD CINEMATIC FEED ── */
 async function loadCinematicFeed(page = 1) {
   const rail = document.querySelector('[data-cinema-feed]');
   const feature = document.querySelector('[data-cinema-feature-wrap]');
   const more = document.querySelector('[data-cinema-more]');
   if (!rail || !feature) return;
-  if (page === 1) rail.innerHTML = '<div class="cinema-loading cinema-card-skeleton"></div>'.repeat(6);
+  if (page === 1) {
+    rail.innerHTML = Array(6).fill('<div class="cinema-loading cinema-card-skeleton"></div>').join('');
+  }
   try {
     const result = await backendRequest(`/api/cinematic-feed?page=${page}`);
     if (page === 1) {
@@ -242,8 +276,10 @@ async function loadCinematicFeed(page = 1) {
       const offset = rail.querySelectorAll('.cinema-card').length;
       rail.insertAdjacentHTML('beforeend', result.items.map((item, index) => cinematicCard(item, offset + index)).join(''));
     }
-    more.hidden = !result.hasNextPage;
-    more.dataset.page = String(result.page + 1);
+    if (more) {
+      more.hidden = !result.hasNextPage;
+      more.dataset.page = String(result.page + 1);
+    }
   } catch (error) {
     if (page === 1) {
       feature.innerHTML = `<div class="cinema-error"><strong>The cinema is taking a moment.</strong><span>${escapeHTML(error.message)}</span><button class="button-refresh" type="button" data-cinema-retry>Try again</button></div>`;
@@ -252,6 +288,7 @@ async function loadCinematicFeed(page = 1) {
   }
 }
 
+/* ── TEASER LOGIC (FIXED: strictly keyed to exact TMDB id) ── */
 function stopCinemaTeaser(card) {
   const holder = card.querySelector('[data-cinema-teaser]');
   if (holder) holder.innerHTML = '';
@@ -261,46 +298,79 @@ function stopCinemaTeaser(card) {
 async function startCinemaTeaser(card) {
   const holder = card.querySelector('[data-cinema-teaser]');
   if (!holder || card.dataset.teaserLoading === '1' || card.classList.contains('is-teasing')) return;
+
+  // Capture the identity of *this exact card* before any await
+  const exactCategory = card.dataset.cinemaCategory;
+  const exactMedia    = card.dataset.cinemaMedia;
+  const exactId       = card.dataset.cinemaId;
+  const requestKey    = `${exactMedia}:${exactId}`;
+
   card.dataset.teaserLoading = '1';
-  const requestKey = `${card.dataset.cinemaMedia}:${card.dataset.cinemaId}`;
   card.dataset.teaserRequest = requestKey;
+
   try {
-    const query = new URLSearchParams({ category: card.dataset.cinemaCategory, mediaType: card.dataset.cinemaMedia, id: card.dataset.cinemaId });
+    const query = new URLSearchParams({ category: exactCategory, mediaType: exactMedia, id: exactId });
     const result = await backendRequest(`/api/trailer?${query.toString()}`);
-    if (!card.isConnected || card.dataset.teaserRequest !== requestKey || !result.available || !result.trailer?.embedUrl) return;
+
+    // After the await: verify the card is still hovered (same request) and
+    // the trailer actually belongs to the title we asked for.
+    if (
+      !card.isConnected ||
+      card.dataset.teaserRequest !== requestKey ||
+      !result.available ||
+      !result.trailer?.embedUrl
+    ) return;
+
     const embed = new URL(result.trailer.embedUrl);
     embed.searchParams.set('autoplay', '1');
     embed.searchParams.set('mute', '1');
     embed.searchParams.set('controls', '0');
     embed.searchParams.set('modestbranding', '1');
     embed.searchParams.set('playsinline', '1');
+    embed.searchParams.set('loop', '1');
+
     const iframe = document.createElement('iframe');
     iframe.src = embed.href;
+    // Title contains the exact movie name so we know which teaser is showing
     iframe.title = `${card.querySelector('h3')?.textContent || 'Title'} teaser`;
     iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
     iframe.setAttribute('aria-hidden', 'true');
     iframe.tabIndex = -1;
     holder.replaceChildren(iframe);
-    requestAnimationFrame(() => { if (card.isConnected && card.dataset.teaserRequest === requestKey) card.classList.add('is-teasing'); });
+
+    // One final guard after sync DOM work
+    requestAnimationFrame(() => {
+      if (card.isConnected && card.dataset.teaserRequest === requestKey) {
+        card.classList.add('is-teasing');
+      }
+    });
   } catch {
-    // A missing trailer should leave the poster intact; never substitute another title's video.
+    // A missing trailer should leave the poster intact.
+    // Never show another title's video.
   } finally {
-    if (card.isConnected && card.dataset.teaserRequest === requestKey) card.dataset.teaserLoading = '0';
+    if (card.isConnected && card.dataset.teaserRequest === requestKey) {
+      card.dataset.teaserLoading = '0';
+    }
   }
 }
 
+/* ── RECOMMENDATION SECTION ── */
 function recommendationSection(categoryKey) {
   const category = categories[categoryKey];
   return `<section class="section recommendation-section" style="--category-color:${category.color}">
     <div class="section-heading">
       <h2>${category.label}</h2>
-      <div class="recommendation-controls"><a class="text-link" href="${appHref(category.page)}">Your list</a><button class="button-refresh" type="button" data-refresh="${categoryKey}" aria-label="Refresh ${category.label} recommendations"><span aria-hidden="true">↻</span> Refresh ${category.label}</button></div>
+      <div class="recommendation-controls">
+        <a class="text-link" href="${appHref(category.page)}">Your list</a>
+        <button class="button-refresh" type="button" data-refresh="${categoryKey}" aria-label="Refresh ${category.label} recommendations"><span aria-hidden="true">↻</span> Refresh ${category.label}</button>
+      </div>
     </div>
     <p class="recommendation-status" data-recommendation-status="${categoryKey}" aria-live="polite" hidden></p>
     <div class="poster-grid" data-recommendation-results="${categoryKey}"></div>
   </section>`;
 }
 
+/* ── HOME PAGE ── */
 function homeMarkup() {
   return `${navMarkup('home')}<main class="main">
     <section class="hero">
@@ -316,6 +386,7 @@ function homeMarkup() {
   </dialog>`;
 }
 
+/* ── WATCHED CARD ── */
 function watchedCard(entry) {
   const detailsHref = contentDetailsHref(entry.categoryKey, entry.item);
   const title = escapeHTML(entry.item.title);
@@ -346,6 +417,7 @@ function removeFromHistory(key) {
   render();
 }
 
+/* ── HISTORY PAGE ── */
 function historyMarkup(history) {
   const entries = Object.entries(categories).flatMap(([categoryKey, category]) => getEntries(history, categoryKey).map((entry) => ({ ...entry, categoryKey, category })))
     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
@@ -363,6 +435,7 @@ function historyMarkup(history) {
   </main><footer class="footer">Your watch history stays in this browser.</footer>`;
 }
 
+/* ── SOMEDAY PAGE ── */
 function somedayRow(entry) {
   return `<article class="history-row someday-row">
     <a href="${contentDetailsHref(entry.categoryKey, entry.item)}" aria-label="View ${escapeHTML(entry.item.title)} details"><div class="poster-image">${imageMarkup(entry.item, entry.categoryKey)}</div></a>
@@ -385,10 +458,12 @@ function somedayMarkup(someday) {
   </main><footer class="footer">Your Someday list stays in this browser.</footer>`;
 }
 
+/* ── KEY HELPERS ── */
 function historyKey(categoryKey, item) {
   return `${categoryKey}:${item.mediaType}:${item.id}`;
 }
 
+/* ── SEARCH RESULT ── */
 function searchResultMarkup(categoryKey, item, history) {
   const resultKey = historyKey(categoryKey, item);
   const detailsHref = contentDetailsHref(categoryKey, item);
@@ -401,6 +476,7 @@ function searchResultMarkup(categoryKey, item, history) {
   </article>`;
 }
 
+/* ── RECOMMENDATION CARD ── */
 function recommendationCard(categoryKey, item) {
   const key = historyKey(categoryKey, item);
   const history = readHistory();
@@ -430,12 +506,7 @@ function addRecommendationToCollection(button, categoryKey, collectionName) {
   if (!item) return;
   const collection = collectionName === 'history' ? readHistory() : readSomeday();
   if (collection[key]) return;
-  collection[key] = {
-    category: categoryKey,
-    status: collectionName === 'history' ? 'watching' : 'planned',
-    updatedAt: Date.now(),
-    item
-  };
+  collection[key] = { category: categoryKey, status: collectionName === 'history' ? 'watching' : 'planned', updatedAt: Date.now(), item };
   if (collectionName === 'history') writeHistory(collection);
   else writeSomeday(collection);
   button.disabled = true;
@@ -456,18 +527,13 @@ async function openRecommendationTrailer(item) {
   dialog.showModal();
 
   try {
-    const query = new URLSearchParams({
-      category: item.category,
-      mediaType: item.mediaType,
-      id: item.id
-    });
+    const query = new URLSearchParams({ category: item.category, mediaType: item.mediaType, id: item.id });
     const result = await backendRequest(`/api/trailer?${query.toString()}`);
     const trailer = result.trailer;
     if (!result.available || !trailer?.embedUrl) {
       content.innerHTML = '<p class="trailer-dialog-status" role="status">A playable trailer is currently unavailable for this title.</p>';
       return;
     }
-
     const embedUrl = new URL(trailer.embedUrl);
     if (embedUrl.protocol !== 'https:' || !['www.youtube-nocookie.com', 'www.youtube.com', 'player.vimeo.com'].includes(embedUrl.hostname)) {
       throw new Error('The backend returned an unsupported trailer player.');
@@ -519,6 +585,7 @@ function loadVisibleRecommendationRatings(results) {
   });
 }
 
+/* ── DETAILS PAGE ── */
 function detailsMarkup() {
   return `${navMarkup('')}<main class="main"><div class="content-details" data-content-details><p class="details-loading" role="status">Loading content details...</p></div></main>`;
 }
@@ -606,7 +673,7 @@ function detailsContentMarkup(detail) {
       ${castMarkup(detail)}
       ${detail.keywords?.length ? `<section class="detail-keywords"><h2>Topics</h2><div>${detail.keywords.map((keyword) => `<span>${escapeHTML(keyword)}</span>`).join('')}</div></section>` : ''}
       ${facts.length ? `<dl class="detail-facts">${facts.map(([label, value]) => `<div><dt>${escapeHTML(label)}</dt><dd>${escapeHTML(value)}</dd></div>`).join('')}</dl>` : ''}
-      ${detail.imdbId ? `<a class="detail-external-link" href="https://www.imdb.com/title/${encodeURIComponent(detail.imdbId)}/" target="_blank" rel="noreferrer">View on IMDb</a>` : ''}
+      ${detail.imdbId ? `<a class="detail-external-link" href="https://www.imdb.com/title/${encodeURIComponent(detail.imdbId)}/" target="_blank" rel="noreferrer">View on IMDb →</a>` : ''}
     </div>
   </article>`;
 }
@@ -663,6 +730,7 @@ async function loadContentDetails() {
   }
 }
 
+/* ── IMPORT ── */
 const importBatchSize = 10;
 const importMaxTitles = 300;
 const importMaxBytes = 200 * 1024;
@@ -677,7 +745,7 @@ function parseImportList(text) {
     if (!title || title.startsWith('#')) return;
     title = title.replace(/^(?:\d{1,3}[.)]|[-*•])\s+/, '').trim();
     let year;
-    const yearMatch = title.match(/^(.*\S)\s*(?:[(\[]\s*((?:19|20)\d{2})\s*[)\]]|[-–,]\s+((?:19|20)\d{2}))$/);
+    const yearMatch = title.match(/^(.*\S)\s*(?:[([\s*((?:19|20)\d{2})\s*[)\]]|[-–,]\s+((?:19|20)\d{2}))$/);
     if (yearMatch) {
       title = yearMatch[1].trim();
       year = Number(yearMatch[2] || yearMatch[3]);
@@ -761,10 +829,7 @@ async function runImport(form) {
       const key = historyKey(categoryKey, item);
       if (seen.has(key)) return;
       seen.add(key);
-      if (history[key]) {
-        existing += 1;
-        return;
-      }
+      if (history[key]) { existing += 1; return; }
       history[key] = { category: categoryKey, status: 'completed', updatedAt: baseTime - index, item };
       added += 1;
     });
@@ -778,6 +843,7 @@ async function runImport(form) {
   }
 }
 
+/* ── CATEGORY PAGE ── */
 function categoryMarkup(categoryKey, history) {
   const category = categories[categoryKey];
   const entries = getEntries(history, categoryKey);
@@ -793,6 +859,7 @@ function categoryMarkup(categoryKey, history) {
   </main><footer class="footer">Your watch history stays in this browser.</footer>`;
 }
 
+/* ── THEME ── */
 function setTheme(theme) {
   const nextTheme = theme === 'dark' ? 'dark' : 'light';
   document.documentElement.dataset.theme = nextTheme;
@@ -802,8 +869,12 @@ function setTheme(theme) {
     toggle.textContent = nextTheme === 'light' ? '☀' : '☾';
     toggle.setAttribute('aria-label', `Switch to ${nextTheme === 'light' ? 'dark' : 'light'} theme`);
   }
+  // Update theme-color meta
+  const metaTheme = document.querySelector('meta[name="theme-color"]');
+  if (metaTheme) metaTheme.content = nextTheme === 'dark' ? '#050508' : '#f6f5f1';
 }
 
+/* ── RECOMMENDATIONS ── */
 async function updateRecommendationSection(categoryKey, page) {
   const status = document.querySelector(`[data-recommendation-status="${categoryKey}"]`);
   const results = document.querySelector(`[data-recommendation-results="${categoryKey}"]`);
@@ -826,6 +897,7 @@ async function updateRecommendationSection(categoryKey, page) {
   }
 }
 
+/* ── SEARCH ── */
 function runSearch(form, query) {
   const categoryKey = form.dataset.titleSearch;
   const status = form.querySelector(`[data-search-status="${categoryKey}"]`);
@@ -858,6 +930,35 @@ function runSearch(form, query) {
   });
 }
 
+/* ══════════════════════════════════════
+   CINEMATIC PAGE LOADER
+   ══════════════════════════════════════ */
+function injectPageLoader() {
+  if (document.querySelector('.cinema-page-loader')) return;
+  const loader = document.createElement('div');
+  loader.className = 'cinema-page-loader';
+  loader.setAttribute('aria-hidden', 'true');
+  loader.innerHTML = `
+    <svg class="cinema-loader-logo" viewBox="78 55 398 300" aria-hidden="true">
+      <g fill="none" stroke="currentColor" stroke-linecap="square" stroke-linejoin="miter" stroke-width="34"><path d="M146 326V145L292 294 438 145V326"></path></g>
+      <circle cx="146" cy="126" r="48" fill="none" stroke="currentColor" stroke-width="12"></circle>
+      <circle cx="146" cy="126" r="7" fill="currentColor"></circle>
+    </svg>
+    <div class="cinema-loader-bar"></div>
+    <span class="cinema-loader-text">Memento</span>`;
+  document.body.prepend(loader);
+  // Hide after the page is rendered and a short cinematic pause
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      loader.classList.add('is-hidden');
+      setTimeout(() => loader.remove(), 800);
+    }, 600);
+  });
+}
+
+/* ══════════════════════════════════════
+   MAIN RENDER
+   ══════════════════════════════════════ */
 function render() {
   const page = document.body.dataset.page;
   const history = readHistory();
@@ -868,6 +969,7 @@ function render() {
   root.querySelector('.theme-toggle')?.addEventListener('click', () => {
     setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
   });
+
   if (root.dataset.trailerClickHandler !== 'ready') {
     root.dataset.trailerClickHandler = 'ready';
     root.addEventListener('click', (event) => {
@@ -877,6 +979,7 @@ function render() {
       if (item) void openRecommendationTrailer(item);
     });
   }
+
   root.querySelector('[data-close-trailer]')?.addEventListener('click', () => {
     const dialog = root.querySelector('[data-trailer-dialog]');
     if (dialog?.open) dialog.close();
@@ -888,6 +991,7 @@ function render() {
     const content = root.querySelector('[data-trailer-content]');
     if (content) content.innerHTML = '<p class="trailer-dialog-status" role="status">Loading trailer...</p>';
   });
+
   root.querySelectorAll('[data-title-search]').forEach((form) => {
     const input = form.querySelector('input[name="query"]');
     input.addEventListener('input', () => {
@@ -915,6 +1019,8 @@ function render() {
 
   if (page === 'home') {
     const rail = root.querySelector('[data-cinema-feed]');
+
+    // ── Teaser: pointer enter/leave on the RAIL (event delegation)
     rail?.addEventListener('pointerover', (event) => {
       const card = event.target.closest('.cinema-card');
       if (card && rail.contains(card)) void startCinemaTeaser(card);
@@ -923,37 +1029,42 @@ function render() {
       const card = event.target.closest('.cinema-card');
       if (!card || !rail.contains(card)) return;
       if (event.relatedTarget && card.contains(event.relatedTarget)) return;
+      // Cancel pending teaser for this card so a stale fetch never shows
       card.dataset.teaserRequest = '';
       stopCinemaTeaser(card);
     });
+
     root.querySelector('[data-cinema-more]')?.addEventListener('click', (event) => {
       const button = event.currentTarget;
       button.disabled = true;
       void loadCinematicFeed(Number(button.dataset.page || 2)).finally(() => { button.disabled = false; });
     });
+
     root.querySelectorAll('[data-cinema-history]').forEach((button) => button.addEventListener('click', () => {
       const item = searchResultCache.get(button.dataset.cinemaHistory);
       if (!item) return;
-      const history = readHistory();
+      const h = readHistory();
       const key = historyKey(item.category, item);
-      if (history[key]) return;
-      history[key] = { category: item.category, status: 'watching', updatedAt: Date.now(), item };
-      writeHistory(history);
+      if (h[key]) return;
+      h[key] = { category: item.category, status: 'watching', updatedAt: Date.now(), item };
+      writeHistory(h);
       button.disabled = true;
       button.textContent = '✓';
       button.classList.add('is-added');
     }));
+
     root.querySelectorAll('[data-cinema-someday]').forEach((button) => button.addEventListener('click', () => {
       const item = searchResultCache.get(button.dataset.cinemaSomeday);
       if (!item) return;
-      const someday = readSomeday();
+      const s = readSomeday();
       const key = historyKey(item.category, item);
-      if (someday[key]) return;
-      someday[key] = { category: item.category, status: 'planned', updatedAt: Date.now(), item };
-      writeSomeday(someday);
+      if (s[key]) return;
+      s[key] = { category: item.category, status: 'planned', updatedAt: Date.now(), item };
+      writeSomeday(s);
       button.disabled = true;
       button.classList.add('is-added');
     }));
+
     root.querySelector('[data-cinema-retry]')?.addEventListener('click', () => void loadCinematicFeed(1));
     void loadCinematicFeed(1);
   }
@@ -980,7 +1091,6 @@ function render() {
 
   root.querySelectorAll('[data-remove-someday]').forEach((button) => button.addEventListener('click', () => {
     const someday = readSomeday();
-    const entry = someday[button.dataset.removeSomeday];
     delete someday[button.dataset.removeSomeday];
     writeSomeday(someday);
     render();
@@ -993,4 +1103,6 @@ function render() {
   }
 }
 
+// Show cinematic loader on first paint, then render
+injectPageLoader();
 render();
