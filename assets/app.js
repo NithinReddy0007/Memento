@@ -25,6 +25,7 @@ const navigation = [
   { label: 'Home', page: 'home', href: 'index.html' },
   { label: 'History', page: 'history', href: 'pages/history/index.html' },
   { label: 'Someday', page: 'someday', href: 'pages/someday/index.html' },
+  { label: 'Analysis', page: 'analysis', href: 'pages/analysis/index.html' },
   ...Object.entries(categories).map(([key, category]) => ({ label: category.label, page: key, href: category.page }))
 ];
 
@@ -561,6 +562,547 @@ function somedayMarkup(someday) {
   </main><footer class="footer">Your Someday list stays in this browser.</footer>`;
 }
 
+/* ══════════════════════════════════════
+   ANALYSIS MODULE
+   ══════════════════════════════════════ */
+let analysisActiveCategory = 'all'; // 'all' | 'movies' | 'tv-shows' | 'anime' | 'documentaries'
+let analysisActiveItemKey = 'ALL';   // 'ALL' | historyKey
+const analysisDetailsCache = new Map();
+
+function formatDurationHoursMinutes(totalMinutes) {
+  if (!totalMinutes || totalMinutes <= 0) return '0 min';
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes} min`;
+  if (minutes === 0) return `${hours} hr`;
+  return `${hours} hr ${minutes} min`;
+}
+
+function calculateItemDurationMinutes(item, detail = null) {
+  if (!item) return 0;
+  const isTvSeries = item.mediaType === 'tv';
+  
+  if (isTvSeries) {
+    const episodeCount = detail?.episodes || 12; // Fallback to 12 episodes if detail not yet loaded
+    let perEpMinutes = 24; // typical default
+    if (detail?.episodeRuntime?.length) {
+      perEpMinutes = detail.episodeRuntime[0];
+    } else if (item.category === 'anime') {
+      perEpMinutes = 24;
+    } else {
+      perEpMinutes = 45;
+    }
+    return episodeCount * perEpMinutes;
+  }
+  
+  // Movie / Documentary
+  if (detail?.runtime && detail.runtime > 0) return detail.runtime;
+  if (detail?.omdb?.runtime) {
+    const match = String(detail.omdb.runtime).match(/(\d+)/);
+    if (match) return Number(match[1]);
+  }
+  return item.category === 'documentaries' ? 85 : 105; // realistic fallback
+}
+
+function renderAnalysisGenreBars(genreCounts, totalCount) {
+  const sorted = Object.entries(genreCounts).sort((a, b) => b[1] - a[1]).slice(0, 7);
+  if (!sorted.length) return '<p class="empty-state" style="padding:16px;">No genre data available.</p>';
+  const max = sorted[0][1] || 1;
+  return `<div class="analysis-genre-bars">
+    ${sorted.map(([genre, count]) => {
+      const pct = Math.round((count / max) * 100);
+      return `<div class="analysis-genre-bar-item">
+        <div class="analysis-genre-bar-header">
+          <span>${escapeHTML(genre)}</span>
+          <span style="color:var(--muted)">${count} ${count === 1 ? 'title' : 'titles'}</span>
+        </div>
+        <div class="analysis-genre-track">
+          <div class="analysis-genre-fill" style="width:${pct}%"></div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function renderAnalysisPeopleList(peopleArray, typeLabel) {
+  if (!peopleArray.length) {
+    return `<p class="empty-state" style="padding:16px;">No ${typeLabel.toLowerCase()} recorded in this selection.</p>`;
+  }
+  return `<div class="analysis-rank-list">
+    ${peopleArray.slice(0, 6).map((person, idx) => `
+      <div class="analysis-rank-row">
+        <div class="analysis-person-info">
+          ${person.image ? `<img class="analysis-person-photo" src="${escapeHTML(person.image)}" alt="${escapeHTML(person.name)}" loading="lazy">` : `<div class="analysis-person-avatar-fallback">${escapeHTML(castInitials(person.name))}</div>`}
+          <div>
+            <div class="analysis-person-name">${escapeHTML(person.name)}</div>
+            ${person.character ? `<div class="analysis-person-sub">${escapeHTML(person.character)}</div>` : (person.titles ? `<div class="analysis-person-sub">${person.titles.slice(0, 2).map(escapeHTML).join(', ')}${person.titles.length > 2 ? '…' : ''}</div>` : '')}
+          </div>
+        </div>
+        <div class="analysis-badge-count">
+          ${person.count ? `${person.count} ${person.count === 1 ? 'watch' : 'watches'}` : `#${idx + 1}`}
+        </div>
+      </div>
+    `).join('')}
+  </div>`;
+}
+
+function analysisMarkup(history) {
+  const entries = Object.entries(history)
+    .filter(([key, entry]) => entry && entry.item && entry.category)
+    .map(([key, entry]) => ({ ...entry, key }))
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+  if (!entries.length) {
+    return `${navMarkup('analysis')}<main class="main">
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow">Viewing Insights</p>
+          <h1>Watch Analysis</h1>
+        </div>
+        <p class="page-intro">Dynamic analytics across your watch history.</p>
+      </div>
+      <div class="empty-state" style="margin-top: 40px; padding: 48px 24px;">
+        <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" style="margin: 0 auto 16px; color: var(--muted);"><path d="M3 3v18h18M9 9l3 3 4-4 3 3"/></svg>
+        <p style="font-size: 15px; font-weight: 600; margin-bottom: 8px;">Your Watch History is currently empty</p>
+        <p style="max-width: 440px; margin: 0 auto 20px; color: var(--muted);">Start tracking movies, TV series, anime, or documentaries to unlock detailed duration, cast, and genre insights.</p>
+        <a class="button-primary" href="${appHref('index.html')}">Explore Trending Titles</a>
+      </div>
+    </main><footer class="footer">Your watch history stays in this browser.</footer>`;
+  }
+
+  // Filter entries according to active category tab
+  const categoryFilteredEntries = analysisActiveCategory === 'all'
+    ? entries
+    : entries.filter((e) => e.category === analysisActiveCategory);
+
+  // If currently selected item isn't ALL and doesn't exist or isn't in current category filter, adjust
+  if (analysisActiveItemKey !== 'ALL') {
+    const existsInFiltered = categoryFilteredEntries.some((e) => e.key === analysisActiveItemKey);
+    if (!existsInFiltered) {
+      analysisActiveItemKey = 'ALL';
+    }
+  }
+
+  const isScopeAll = analysisActiveItemKey === 'ALL';
+  const selectedEntry = isScopeAll ? null : entries.find((e) => e.key === analysisActiveItemKey);
+
+  return `${navMarkup('analysis')}<main class="main">
+    <div class="page-heading">
+      <div>
+        <p class="eyebrow">Interactive Insights</p>
+        <h1>Watch Analysis</h1>
+      </div>
+      <p class="page-intro">Switch scopes dynamically below to analyze your entire history or inspect individual titles.</p>
+    </div>
+
+    <!-- 1. ITEM-FIRST SCOPE SELECTOR -->
+    <section class="analysis-scope-selector">
+      <!-- Category Filter Pills -->
+      <div class="analysis-category-filter">
+        <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin-right:4px;">Category:</span>
+        <button class="analysis-filter-btn ${analysisActiveCategory === 'all' ? 'is-active' : ''}" type="button" data-analysis-cat="all">All (${entries.length})</button>
+        ${Object.entries(categories).map(([catKey, cat]) => {
+          const count = entries.filter((e) => e.category === catKey).length;
+          return `<button class="analysis-filter-btn ${analysisActiveCategory === catKey ? 'is-active' : ''}" type="button" data-analysis-cat="${catKey}">${cat.label} (${count})</button>`;
+        }).join('')}
+      </div>
+
+      <!-- Item Selection Rail -->
+      <div class="analysis-item-rail">
+        <button class="analysis-item-pill ${analysisActiveItemKey === 'ALL' ? 'is-active' : ''}" type="button" data-analysis-item="ALL">
+          <span class="analysis-pill-icon">★</span>
+          <span>All ${analysisActiveCategory === 'all' ? 'Watched Content' : (categories[analysisActiveCategory]?.label || '')} combined</span>
+        </button>
+        ${categoryFilteredEntries.map((e) => {
+          const isActive = e.key === analysisActiveItemKey;
+          return `<button class="analysis-item-pill ${isActive ? 'is-active' : ''}" type="button" data-analysis-item="${escapeHTML(e.key)}" title="${escapeHTML(e.item.title)}">
+            ${e.item.image ? `<img class="analysis-pill-poster" src="${escapeHTML(e.item.image)}" alt="">` : `<span class="analysis-pill-icon">🎬</span>`}
+            <span>${escapeHTML(e.item.title)}</span>
+          </button>`;
+        }).join('')}
+      </div>
+    </section>
+
+    <!-- CONTAINER FOR DYNAMIC CONTENT ANALYSIS -->
+    <div data-analysis-results-container>
+      ${renderAnalysisResultsMarkup(entries, isScopeAll, selectedEntry)}
+    </div>
+  </main><footer class="footer">Your watch history stays in this browser.</footer>`;
+}
+
+function renderAnalysisResultsMarkup(allEntries, isScopeAll, selectedEntry) {
+  if (isScopeAll) {
+    return renderAllScopeAnalysis(allEntries);
+  } else if (selectedEntry) {
+    return renderSingleItemAnalysis(selectedEntry);
+  }
+  return '';
+}
+
+/* ── 2. ALL CONTENT ANALYSIS ── */
+function renderAllScopeAnalysis(allEntries) {
+  const targetEntries = analysisActiveCategory === 'all'
+    ? allEntries
+    : allEntries.filter((e) => e.category === analysisActiveCategory);
+
+  const totalTitles = targetEntries.length;
+  const completedCount = targetEntries.filter((e) => e.status === 'completed').length;
+  const inProgressCount = targetEntries.filter((e) => e.status === 'watching').length;
+
+  // Aggregate duration across titles
+  let totalMinutes = 0;
+  const durationByCategory = { movies: 0, 'tv-shows': 0, anime: 0, documentaries: 0 };
+  const genreCounts = {};
+  const actorMap = new Map();   // name -> { count, image, titles: Set, gender }
+  const actressMap = new Map(); // name -> { count, image, titles: Set, gender }
+
+  targetEntries.forEach((entry) => {
+    const item = entry.item;
+    const detail = analysisDetailsCache.get(entry.key);
+    const itemMins = calculateItemDurationMinutes(item, detail);
+    totalMinutes += itemMins;
+    if (durationByCategory[entry.category] !== undefined) {
+      durationByCategory[entry.category] += itemMins;
+    }
+
+    // Genre tally
+    const genres = (detail?.genres && detail.genres.length) ? detail.genres : (item.tags || []).filter((t) => t !== 'More');
+    genres.forEach((genre) => {
+      genreCounts[genre] = (genreCounts[genre] || 0) + 1;
+    });
+
+    // Cast tally (EXCLUDING anime as per requirement #4)
+    if (entry.category !== 'anime' && detail?.cast) {
+      detail.cast.forEach((person) => {
+        if (!person?.name) return;
+        const isActress = person.gender === 1; // TMDB gender 1 = Female, 2 = Male
+        const map = isActress ? actressMap : actorMap;
+        if (!map.has(person.name)) {
+          map.set(person.name, {
+            name: person.name,
+            image: person.image || '',
+            count: 0,
+            titles: new Set()
+          });
+        }
+        const record = map.get(person.name);
+        record.count += 1;
+        record.titles.add(item.title);
+        if (!record.image && person.image) record.image = person.image;
+      });
+    }
+  });
+
+  const topActors = Array.from(actorMap.values())
+    .map((p) => ({ ...p, titles: Array.from(p.titles) }))
+    .sort((a, b) => b.count - a.count);
+
+  const topActresses = Array.from(actressMap.values())
+    .map((p) => ({ ...p, titles: Array.from(p.titles) }))
+    .sort((a, b) => b.count - a.count);
+
+  const categoryLabel = analysisActiveCategory === 'all' ? 'All Content' : categories[analysisActiveCategory]?.label;
+
+  return `
+    <div class="analysis-overview-banner">
+      <div class="analysis-banner-title">
+        <span class="analysis-scope-tag">Aggregate Scope</span>
+        <h2>${categoryLabel} (${totalTitles} ${totalTitles === 1 ? 'title' : 'titles'})</h2>
+      </div>
+      <div style="font-size: 13px; color: var(--muted)">
+        Calculated from ${totalTitles} watch history ${totalTitles === 1 ? 'entry' : 'entries'}
+      </div>
+    </div>
+
+    <!-- STATS TILES -->
+    <div class="analysis-stats-grid">
+      <div class="analysis-stat-card">
+        <span class="analysis-stat-label">Total Duration Watched</span>
+        <span class="analysis-stat-value">${formatDurationHoursMinutes(totalMinutes)}</span>
+        <span class="analysis-stat-subtext">Across ${totalTitles} watched ${totalTitles === 1 ? 'title' : 'titles'}</span>
+      </div>
+      <div class="analysis-stat-card">
+        <span class="analysis-stat-label">Titles Watched</span>
+        <span class="analysis-stat-value">${totalTitles}</span>
+        <span class="analysis-stat-subtext">${completedCount} completed · ${inProgressCount} in progress</span>
+      </div>
+      <div class="analysis-stat-card">
+        <span class="analysis-stat-label">Top Genre</span>
+        <span class="analysis-stat-value">${Object.entries(genreCounts).sort((a,b)=>b[1]-a[1])[0]?.[0] || '—'}</span>
+        <span class="analysis-stat-subtext">${Object.keys(genreCounts).length} distinct genres explored</span>
+      </div>
+      <div class="analysis-stat-card">
+        <span class="analysis-stat-label">Average Runtime / Title</span>
+        <span class="analysis-stat-value">${totalTitles ? Math.round(totalMinutes / totalTitles) : 0} min</span>
+        <span class="analysis-stat-subtext">Reflecting series & film lengths</span>
+      </div>
+    </div>
+
+    <!-- BREAKDOWN & RANKING SECTIONS -->
+    <div class="analysis-sections-grid">
+      <!-- Genres -->
+      <section class="analysis-card-section">
+        <div class="analysis-section-header">
+          <h3>Most Watched Genres</h3>
+          <span style="font-size:11.5px;color:var(--muted)">Frequency in history</span>
+        </div>
+        ${renderAnalysisGenreBars(genreCounts, totalTitles)}
+      </section>
+
+      <!-- Duration Breakdown -->
+      <section class="analysis-card-section">
+        <div class="analysis-section-header">
+          <h3>Duration by Category</h3>
+          <span style="font-size:11.5px;color:var(--muted)">Hours watched</span>
+        </div>
+        <div class="analysis-duration-breakdown">
+          ${Object.entries(durationByCategory).map(([catKey, mins]) => `
+            <div class="analysis-duration-item">
+              <div>
+                <strong>${categories[catKey].label}</strong>
+                <div style="font-size:11px;color:var(--muted)">${targetEntries.filter(e => e.category === catKey).length} titles</div>
+              </div>
+              <div style="text-align:right">
+                <strong style="color:var(--amber)">${formatDurationHoursMinutes(mins)}</strong>
+                <div style="font-size:11px;color:var(--muted)">${totalMinutes > 0 ? Math.round((mins / totalMinutes) * 100) : 0}% of total</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </section>
+
+      <!-- Actors -->
+      <section class="analysis-card-section">
+        <div class="analysis-section-header">
+          <h3>Top Actors Watched</h3>
+          <span style="font-size:11.5px;color:var(--muted)">Movies, TV & Docs</span>
+        </div>
+        ${renderAnalysisPeopleList(topActors, 'Actors')}
+      </section>
+
+      <!-- Actresses -->
+      <section class="analysis-card-section">
+        <div class="analysis-section-header">
+          <h3>Top Actresses Watched</h3>
+          <span style="font-size:11.5px;color:var(--muted)">Movies, TV & Docs</span>
+        </div>
+        ${renderAnalysisPeopleList(topActresses, 'Actresses')}
+      </section>
+    </div>
+  `;
+}
+
+/* ── 3. INDIVIDUAL CONTENT ANALYSIS ── */
+function renderSingleItemAnalysis(entry) {
+  const item = entry.item;
+  const detail = analysisDetailsCache.get(entry.key);
+  const isAnime = entry.category === 'anime';
+  const isTv = item.mediaType === 'tv';
+  const categoryLabel = categories[entry.category]?.label || 'Title';
+  const detailsHref = contentDetailsHref(entry.category, item);
+
+  const durationMinutes = calculateItemDurationMinutes(item, detail);
+  const formattedDuration = formatDurationHoursMinutes(durationMinutes);
+
+  // Cast filtering for single item
+  const rawCast = detail?.cast || [];
+  const actors = rawCast.filter((c) => c.gender !== 1);
+  const actresses = rawCast.filter((c) => c.gender === 1);
+
+  const genres = (detail?.genres && detail.genres.length) ? detail.genres : item.tags || [];
+
+  return `
+    <article class="analysis-single-hero">
+      <img class="analysis-single-poster" src="${escapeHTML(item.image || fallbackImages[entry.category])}" alt="${escapeHTML(item.title)}">
+      <div class="analysis-single-info">
+        <div class="analysis-badge-row">
+          <span class="analysis-scope-tag">${categoryLabel}</span>
+          <span class="category-label" style="text-transform:uppercase">${entry.status === 'completed' ? 'Completed' : 'Watching'}</span>
+        </div>
+        <h2 class="analysis-single-title">${escapeHTML(item.title)}</h2>
+        <div class="analysis-single-meta">
+          <span>${escapeHTML(item.year || '—')}</span>
+          ${Number.isFinite(item.voteAverage) ? `<span>IMDb ${Number(item.voteAverage).toFixed(1)}</span>` : ''}
+          <span>•</span>
+          <a class="text-link" href="${detailsHref}">View full title page →</a>
+        </div>
+        <div class="analysis-tags">
+          ${genres.map((g) => `<span class="analysis-tag">${escapeHTML(g)}</span>`).join('')}
+        </div>
+        ${item.overview ? `<p class="analysis-single-overview" style="margin:6px 0 0;font-size:12.5px;line-height:1.5;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escapeHTML(item.overview)}</p>` : ''}
+      </div>
+    </article>
+
+    <!-- SINGLE ITEM STATS TILES -->
+    <div class="analysis-stats-grid">
+      <div class="analysis-stat-card">
+        <span class="analysis-stat-label">Calculated Watch Duration</span>
+        <span class="analysis-stat-value">${formattedDuration}</span>
+        <span class="analysis-stat-subtext">${isTv ? `${detail?.episodes || 'Multi'}-episode series runtime` : 'Feature length duration'}</span>
+      </div>
+      <div class="analysis-stat-card">
+        <span class="analysis-stat-label">Format & Scale</span>
+        <span class="analysis-stat-value">${isTv ? `${detail?.seasons || 1} Season${(detail?.seasons || 1) > 1 ? 's' : ''}` : 'Film'}</span>
+        <span class="analysis-stat-subtext">${isTv ? `${detail?.episodes || 12} total episodes (${detail?.episodeRuntime?.[0] || (isAnime ? 24 : 45)} min / ep)` : `${durationMinutes} minutes single release`}</span>
+      </div>
+      <div class="analysis-stat-card">
+        <span class="analysis-stat-label">Primary Genre</span>
+        <span class="analysis-stat-value">${genres[0] || 'General'}</span>
+        <span class="analysis-stat-subtext">${genres.length} genres tagged</span>
+      </div>
+      <div class="analysis-stat-card">
+        <span class="analysis-stat-label">Tracking Status</span>
+        <span class="analysis-stat-value" style="text-transform:capitalize">${entry.status || 'Watching'}</span>
+        <span class="analysis-stat-subtext">Recorded in Watch History</span>
+      </div>
+    </div>
+
+    ${isAnime ? `
+      <!-- Anime specific handling: No actor/actress analysis per Requirement #4 -->
+      <div class="analysis-notice">
+        <strong>Anime Analysis Note:</strong> In accordance with anime specifications, live-action actor/actress classifications are omitted. Showing animated production, duration, and thematic details.
+      </div>
+
+      <div class="analysis-sections-grid">
+        <section class="analysis-card-section">
+          <div class="analysis-section-header">
+            <h3>Anime Production Details</h3>
+            <span style="font-size:11.5px;color:var(--muted)">Series specifications</span>
+          </div>
+          <dl class="detail-facts" style="margin:0">
+            <div><dt>Format</dt><dd>${item.mediaType === 'tv' ? 'Television Animation Series' : 'Animated Feature Film'}</dd></div>
+            <div><dt>Origin Country</dt><dd>Japan (JP)</dd></div>
+            <div><dt>Episodes Watched</dt><dd>${detail?.episodes || '12-24 (Complete run)'}</dd></div>
+            <div><dt>Standard Episode Length</dt><dd>${detail?.episodeRuntime?.[0] || 24} minutes</dd></div>
+            <div><dt>Total Series Duration</dt><dd>${formattedDuration}</dd></div>
+            <div><dt>Release Year</dt><dd>${escapeHTML(item.year)}</dd></div>
+          </dl>
+        </section>
+
+        <section class="analysis-card-section">
+          <div class="analysis-section-header">
+            <h3>Thematic & Genre Composition</h3>
+            <span style="font-size:11.5px;color:var(--muted)">Tags</span>
+          </div>
+          <div class="analysis-tags" style="gap:8px;padding-top:4px">
+            ${genres.map((g) => `<span class="analysis-tag" style="padding:6px 12px;font-size:12px">${escapeHTML(g)}</span>`).join('')}
+          </div>
+          ${detail?.keywords?.length ? `
+            <div style="margin-top:16px;">
+              <h4 style="font-size:12px;margin:0 0 8px;text-transform:uppercase;color:var(--muted)">Keywords</h4>
+              <div class="analysis-tags" style="gap:6px">
+                ${detail.keywords.map((k) => `<span class="analysis-tag" style="font-size:10.5px">${escapeHTML(k)}</span>`).join('')}
+              </div>
+            </div>
+          ` : ''}
+        </section>
+      </div>
+    ` : `
+      <!-- Standard Movies / TV / Documentaries with Cast analysis -->
+      <div class="analysis-sections-grid">
+        <section class="analysis-card-section">
+          <div class="analysis-section-header">
+            <h3>Actors in this Title</h3>
+            <span style="font-size:11.5px;color:var(--muted)">Leading cast</span>
+          </div>
+          ${renderAnalysisPeopleList(actors, 'Actors')}
+        </section>
+
+        <section class="analysis-card-section">
+          <div class="analysis-section-header">
+            <h3>Actresses in this Title</h3>
+            <span style="font-size:11.5px;color:var(--muted)">Leading cast</span>
+          </div>
+          ${renderAnalysisPeopleList(actresses, 'Actresses')}
+        </section>
+
+        <section class="analysis-card-section">
+          <div class="analysis-section-header">
+            <h3>Genre & Duration Specifications</h3>
+            <span style="font-size:11.5px;color:var(--muted)">Runtime overview</span>
+          </div>
+          <dl class="detail-facts" style="margin:0">
+            <div><dt>Media Category</dt><dd>${categoryLabel}</dd></div>
+            <div><dt>Calculated Duration</dt><dd>${formattedDuration}</dd></div>
+            ${isTv ? `<div><dt>Episode Count</dt><dd>${detail?.episodes || 'Standard run'} episodes</dd></div>` : ''}
+            <div><dt>Genres</dt><dd>${genres.join(', ') || '—'}</dd></div>
+            <div><dt>Production Countries</dt><dd>${detail?.originCountries?.join(', ') || '—'}</dd></div>
+            ${detail?.omdb?.director ? `<div><dt>Director</dt><dd>${escapeHTML(detail.omdb.director)}</dd></div>` : ''}
+          </dl>
+        </section>
+      </div>
+    `}
+  `;
+}
+
+async function preloadAnalysisDetails(historyEntries) {
+  // Fetch details in batches of 4 for titles in history so runtime and cast are accurate
+  const missing = historyEntries.filter((e) => !analysisDetailsCache.has(e.key));
+  if (!missing.length) return;
+
+  for (let i = 0; i < missing.length; i += 4) {
+    const chunk = missing.slice(i, i + 4);
+    await Promise.allSettled(chunk.map(async (entry) => {
+      const item = entry.item;
+      const query = new URLSearchParams({ category: entry.category, id: item.id, mediaType: item.mediaType });
+      try {
+        const details = await backendRequest(`/api/details?${query.toString()}`);
+        analysisDetailsCache.set(entry.key, details);
+      } catch {}
+    }));
+  }
+
+  // If Analysis page is currently displayed, update container dynamically
+  const container = document.querySelector('[data-analysis-results-container]');
+  if (container) {
+    const history = readHistory();
+    const entries = Object.entries(history)
+      .filter(([key, entry]) => entry && entry.item && entry.category)
+      .map(([key, entry]) => ({ ...entry, key }));
+    const isScopeAll = analysisActiveItemKey === 'ALL';
+    const selectedEntry = isScopeAll ? null : entries.find((e) => e.key === analysisActiveItemKey);
+    container.innerHTML = renderAnalysisResultsMarkup(entries, isScopeAll, selectedEntry);
+  }
+}
+
+function wireAnalysisControls() {
+  const root = document.getElementById('app');
+  if (!root) return;
+
+  // Category filter buttons
+  root.querySelectorAll('[data-analysis-cat]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      analysisActiveCategory = btn.dataset.analysisCat;
+      analysisActiveItemKey = 'ALL'; // Reset to all within category
+      render();
+    });
+  });
+
+  // Individual item pills
+  root.querySelectorAll('[data-analysis-item]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      analysisActiveItemKey = btn.dataset.analysisItem;
+      const history = readHistory();
+      const entries = Object.entries(history)
+        .filter(([key, entry]) => entry && entry.item && entry.category)
+        .map(([key, entry]) => ({ ...entry, key }));
+      const isScopeAll = analysisActiveItemKey === 'ALL';
+      const selectedEntry = isScopeAll ? null : entries.find((e) => e.key === analysisActiveItemKey);
+
+      // Update pills active state
+      root.querySelectorAll('[data-analysis-item]').forEach((p) => {
+        p.classList.toggle('is-active', p.dataset.analysisItem === analysisActiveItemKey);
+      });
+
+      // Update analysis results container without full reload
+      const container = root.querySelector('[data-analysis-results-container]');
+      if (container) {
+        container.innerHTML = renderAnalysisResultsMarkup(entries, isScopeAll, selectedEntry);
+      }
+    });
+  });
+}
+
 /* ── KEY HELPERS ── */
 function historyKey(categoryKey, item) {
   return `${categoryKey}:${item.mediaType}:${item.id}`;
@@ -1068,7 +1610,7 @@ function render() {
   const page = document.body.dataset.page;
   const history = readHistory();
   const root = document.getElementById('app');
-  root.innerHTML = `<div class="shell">${page === 'home' ? homeMarkup() : page === 'history' ? historyMarkup(history) : page === 'someday' ? somedayMarkup(readSomeday()) : page === 'details' ? detailsMarkup() : categoryMarkup(page, history)}</div>`;
+  root.innerHTML = `<div class="shell">${page === 'home' ? homeMarkup() : page === 'history' ? historyMarkup(history) : page === 'someday' ? somedayMarkup(readSomeday()) : page === 'analysis' ? analysisMarkup(history) : page === 'details' ? detailsMarkup() : categoryMarkup(page, history)}</div>`;
   setTheme(localStorage.getItem(themeStorageKey) || 'light');
 
   root.querySelector('.theme-toggle')?.addEventListener('click', () => {
@@ -1188,6 +1730,14 @@ function render() {
   }));
 
   if (page === 'details') void loadContentDetails();
+
+  if (page === 'analysis') {
+    wireAnalysisControls();
+    const historyEntries = Object.entries(history)
+      .filter(([key, entry]) => entry && entry.item && entry.category)
+      .map(([key, entry]) => ({ ...entry, key }));
+    void preloadAnalysisDetails(historyEntries);
+  }
 
   if (page === 'home') {
     Object.keys(categories).forEach((categoryKey) => updateRecommendationSection(categoryKey, randomRecommendationPage()));

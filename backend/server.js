@@ -195,6 +195,7 @@ function buildCast(rawCast) {
       return {
         id: String(person.id),
         name: person.name,
+        gender: typeof person.gender === 'number' ? person.gender : 0,
         character,
         role: character,
         image: person.profile_path ? `https://image.tmdb.org/t/p/w185${person.profile_path}` : '',
