@@ -43,6 +43,7 @@ const imdbMetadataCache = new Map();
 const titleDetailsCache = new Map();
 const youtubeTrailerCache = new Map();
 const titleTrailerCache = new Map();
+const cinematicFeedCache = new Map();
 const recommendationProfiles = {
   movies: { minimumYear: new Date().getFullYear() - 12, minimumVotes: 50, minimumRating: 5.5 },
   'tv-shows': { minimumYear: new Date().getFullYear() - 16, minimumVotes: 100, minimumRating: 6 },
@@ -85,6 +86,7 @@ function normalizeItem(item, category, mediaType) {
     voteCount: item.vote_count || 0,
     voteAverage: item.vote_average || 0,
     image: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : '',
+    backdrop: item.backdrop_path ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}` : '',
     overview: item.overview || '',
     mediaType,
     category,
@@ -145,50 +147,9 @@ function containsTitlePhrase(videoTitle, title) {
 }
 
 async function lookupYouTubeTrailer(title, year) {
-  const apiKey = process.env.YOUTUBE_API_KEY;
-  if (!apiKey || !title) return null;
-  const cacheKey = `${normalizedTitle(title)}:${year || ''}`;
-  if (youtubeTrailerCache.has(cacheKey)) return youtubeTrailerCache.get(cacheKey);
-
-  try {
-    const url = new URL('https://www.googleapis.com/youtube/v3/search');
-    url.searchParams.set('part', 'snippet');
-    url.searchParams.set('type', 'video');
-    url.searchParams.set('videoEmbeddable', 'true');
-    url.searchParams.set('maxResults', '10');
-    url.searchParams.set('safeSearch', 'strict');
-    url.searchParams.set('q', `${title} ${year || ''} official trailer`.trim());
-    url.searchParams.set('key', apiKey);
-    const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!response.ok) return null;
-    const data = await response.json();
-    const candidates = (data.items || []).flatMap((item) => {
-      const videoId = item.id?.videoId;
-      const videoTitle = item.snippet?.title || '';
-      const hasTitleMatch = containsTitlePhrase(videoTitle, title);
-      const hasTrailerLabel = /\b(trailer|teaser|official preview)\b/i.test(videoTitle);
-      const channel = item.snippet?.channelTitle || '';
-      const hasOfficialLabel = /\bofficial\b/i.test(channel) || /\bofficial\b/i.test(videoTitle);
-      if (!videoId || !/^[A-Za-z0-9_-]{6,}$/.test(videoId) || !hasTitleMatch || !hasTrailerLabel || !hasOfficialLabel) return [];
-      return [{
-        name: videoTitle,
-        type: /\bteaser\b/i.test(videoTitle) ? 'Teaser' : 'Trailer',
-        official: true,
-        publishedAt: item.snippet?.publishedAt || '',
-        site: 'YouTube',
-        source: 'YouTube Data API',
-        embedUrl: `https://www.youtube-nocookie.com/embed/${videoId}?controls=1&playsinline=1&rel=0`
-      }];
-    });
-    candidates.sort((first, second) => Number(second.official) - Number(first.official)
-      || Number(second.type === 'Trailer') - Number(first.type === 'Trailer')
-      || second.publishedAt.localeCompare(first.publishedAt));
-    const trailer = candidates[0] || null;
-    youtubeTrailerCache.set(cacheKey, trailer);
-    return trailer;
-  } catch {
-    return null;
-  }
+  // Deliberately disabled for identity-sensitive playback. A generic YouTube search
+  // cannot prove that the returned video belongs to the exact TMDB title.
+  return null;
 }
 
 function selectPlayableTrailer(videos) {
@@ -311,17 +272,17 @@ async function loadTitleTrailer(details) {
   const cacheKey = `${details.category}:${details.mediaType}:${details.id}`;
   if (titleTrailerCache.has(cacheKey)) return titleTrailerCache.get(cacheKey);
 
-  let trailer = await lookupYouTubeTrailer(details.title, details.year);
-  if (!trailer) {
-    const languages = [...new Set(['en-US', details.originalLanguage].filter(Boolean))];
-    for (const language of languages) {
-      try {
-        const videos = await tmdbRequest(`${details.mediaType}/${details.id}/videos`, { language });
-        trailer = selectPlayableTrailer(videos.results || []);
-        if (trailer) break;
-      } catch {
-        continue;
-      }
+  // TMDB video records are tied to this exact title ID, so they cannot drift
+  // to a similarly named film/show the way free-text YouTube search can.
+  let trailer = null;
+  const languages = [...new Set(['en-US', details.originalLanguage].filter(Boolean))];
+  for (const language of languages) {
+    try {
+      const videos = await tmdbRequest(`${details.mediaType}/${details.id}/videos`, { language });
+      trailer = selectPlayableTrailer(videos.results || []);
+      if (trailer) break;
+    } catch {
+      continue;
     }
   }
   titleTrailerCache.set(cacheKey, trailer);
@@ -568,6 +529,69 @@ async function loadRecommendations(category, page, rawHistory) {
   return { items: items.slice(0, 15), personalized };
 }
 
+const cinematicFeedSize = 100;
+const cinematicCandidatePages = 5;
+
+async function loadCinematicFeed(page = 1) {
+  const cacheKey = String(Math.max(1, Math.min(5, page)));
+  if (cinematicFeedCache.has(cacheKey)) return cinematicFeedCache.get(cacheKey);
+  const requests = [
+    tmdbRequest('discover/movie', {
+      page: Number(cacheKey), sort_by: 'vote_average.desc', include_adult: false,
+      'vote_count.gte': 1500, 'vote_average.gte': 7.8,
+      'primary_release_date.lte': new Date().toISOString().slice(0, 10)
+    }),
+    tmdbRequest('discover/tv', {
+      page: Number(cacheKey), sort_by: 'vote_average.desc', include_adult: false,
+      'vote_count.gte': 800, 'vote_average.gte': 7.8,
+      'first_air_date.lte': new Date().toISOString().slice(0, 10)
+    })
+  ];
+  const [movies, shows] = await Promise.all(requests);
+  const seen = new Set();
+  const items = [...(movies.results || []).map((item) => normalizeItem(item, 'movies', 'movie')),
+    ...(shows.results || []).map((item) => normalizeItem(item, 'tv-shows', 'tv'))]
+    .filter((item) => {
+      const key = `${item.mediaType}:${item.id}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => Number(b.voteAverage || 0) - Number(a.voteAverage || 0)
+      || Number(b.voteCount || 0) - Number(a.voteCount || 0));
+
+  // Fetch exact IMDb IDs/ratings only for the visible-sized slice. Results are cached
+  // server-side, so subsequent visitors do not repeatedly hit OMDb for the same title.
+  const enriched = await Promise.all(items.slice(0, 20).map(async (item) => {
+    try {
+      const details = await tmdbRequest(`${item.mediaType}/${item.id}`, { append_to_response: 'external_ids' });
+      const imdbId = details.external_ids?.imdb_id || null;
+      const imdb = imdbId ? await lookupImdbMetadata(imdbId) : null;
+      return { ...item, imdbId, imdbRating: imdb?.rating ?? null, imdbVotes: imdb?.votes ?? null };
+    } catch {
+      return item;
+    }
+  }));
+  const enrichedMap = new Map(enriched.map((item) => [`${item.mediaType}:${item.id}`, item]));
+  const merged = items.map((item) => enrichedMap.get(`${item.mediaType}:${item.id}`) || item);
+  const imdbRated = merged.filter((item) => Number.isFinite(item.imdbRating));
+  const sorted = (imdbRated.length >= 8 ? imdbRated : merged).sort((a, b) => {
+    const ar = Number.isFinite(a.imdbRating) ? a.imdbRating : a.voteAverage;
+    const br = Number.isFinite(b.imdbRating) ? b.imdbRating : b.voteAverage;
+    return br - ar || Number(b.voteCount || 0) - Number(a.voteCount || 0);
+  });
+  const result = {
+    collection: 'IMDb Top 100 · Movies & TV',
+    collectionSize: cinematicFeedSize,
+    page: Number(cacheKey),
+    hasNextPage: Number(cacheKey) < cinematicCandidatePages,
+    imdbConfigured: Boolean(process.env.OMDB_API_KEY),
+    items: sorted.slice(0, 20)
+  };
+  cinematicFeedCache.set(cacheKey, result);
+  return result;
+}
+
 function sendJson(response, status, value) {
   response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   response.end(JSON.stringify(value));
@@ -644,6 +668,10 @@ async function handleApi(request, response, url) {
       const id = url.searchParams.get('id') || '';
       const mediaType = url.searchParams.get('mediaType') || '';
       return sendJson(response, 200, await loadTitleDetails(category, id, mediaType));
+    }
+    if (request.method === 'GET' && url.pathname === '/api/cinematic-feed') {
+      const page = Math.max(1, Math.min(cinematicCandidatePages, Number.parseInt(url.searchParams.get('page'), 10) || 1));
+      return sendJson(response, 200, await loadCinematicFeed(page));
     }
     if (request.method === 'GET' && url.pathname === '/api/search') {
       const category = url.searchParams.get('category');
