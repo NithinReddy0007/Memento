@@ -183,25 +183,25 @@ function selectPlayableTrailer(videos) {
   return candidates[0] || null;
 }
 
-function buildCast(rawCast) {
+function buildCast(rawCast, limit = 20) {
   const seen = new Set();
-  return (Array.isArray(rawCast) ? rawCast : [])
+  const filtered = (Array.isArray(rawCast) ? rawCast : [])
     .filter((person) => person?.id && person.name)
     .sort((first, second) => (first.order ?? 9999) - (second.order ?? 9999))
-    .filter((person) => !seen.has(person.id) && seen.add(person.id))
-    .slice(0, 20)
-    .map((person, index) => {
-      const character = String(person.character || '').replace(/\s*\(voice\)/gi, '').trim();
-      return {
-        id: String(person.id),
-        name: person.name,
-        gender: typeof person.gender === 'number' ? person.gender : 0,
-        character,
-        role: character,
-        image: person.profile_path ? `https://image.tmdb.org/t/p/w185${person.profile_path}` : '',
-        order: person.order ?? index
-      };
-    });
+    .filter((person) => !seen.has(person.id) && seen.add(person.id));
+  const sliced = limit === Infinity ? filtered : filtered.slice(0, limit);
+  return sliced.map((person, index) => {
+    const character = String(person.character || '').replace(/\s*\(voice\)/gi, '').trim();
+    return {
+      id: String(person.id),
+      name: person.name,
+      gender: typeof person.gender === 'number' ? person.gender : 0,
+      character,
+      role: character,
+      image: person.profile_path ? `https://image.tmdb.org/t/p/w185${person.profile_path}` : '',
+      order: person.order ?? index
+    };
+  });
 }
 
 async function loadTitleDetails(category, id, mediaType) {
@@ -226,6 +226,39 @@ async function loadTitleDetails(category, id, mediaType) {
     const error = new Error('This title does not belong to the requested category.');
     error.status = 404;
     throw error;
+  }
+
+  // For TV shows: fetch every season's cast and merge into one deduplicated array.
+  // TMDB's top-level credits only returns the most recent season's cast, so actors
+  // who appeared in earlier seasons (e.g. Victoria Pedretti in "You" S1-S3) are missed.
+  let mergedCast = details.credits?.cast || [];
+  if (mediaType === 'tv' && details.number_of_seasons > 0) {
+    const seasonNumbers = Array.from({ length: details.number_of_seasons }, (_, i) => i + 1);
+    const seasonResults = await Promise.allSettled(
+      seasonNumbers.map((n) => tmdbRequest(`tv/${id}/season/${n}/credits`))
+    );
+    // Build a map seeded with the series-level cast, then layer in season-level cast
+    const castByPersonId = new Map();
+    mergedCast.forEach((p) => {
+      if (p?.id) castByPersonId.set(String(p.id), p);
+    });
+    seasonResults.forEach((result) => {
+      if (result.status !== 'fulfilled') return;
+      (result.value?.cast || []).forEach((p) => {
+        if (!p?.id) return;
+        const key = String(p.id);
+        if (!castByPersonId.has(key)) {
+          castByPersonId.set(key, p);
+        } else {
+          // Prefer whichever entry has a profile photo
+          const existing = castByPersonId.get(key);
+          if (!existing.profile_path && p.profile_path) {
+            castByPersonId.set(key, { ...existing, profile_path: p.profile_path });
+          }
+        }
+      });
+    });
+    mergedCast = Array.from(castByPersonId.values());
   }
 
   const imdbId = details.external_ids?.imdb_id || details.imdb_id || null;
@@ -258,7 +291,8 @@ async function loadTitleDetails(category, id, mediaType) {
     originCountries: details.origin_country || (details.production_countries || []).map((country) => country.iso_3166_1),
     productionCompanies: (details.production_companies || []).map((company) => company.name),
     keyPeople,
-    cast: buildCast(details.credits?.cast),
+    // TV shows get the full all-seasons merged cast (unlimited); movies keep the default 20
+    cast: mediaType === 'tv' ? buildCast(mergedCast, Infinity) : buildCast(mergedCast),
     keywords: keywords.slice(0, 10).map((keyword) => keyword.name),
     tmdbRating: Number.isFinite(Number(details.vote_average)) ? Number(details.vote_average) : null,
     tmdbVoteCount: details.vote_count || 0,
