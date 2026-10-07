@@ -11,6 +11,7 @@ const storageKey = 'memento.watchHistory.v1';
 const somedayStorageKey = 'memento.someday.v1';
 const themeStorageKey = 'memento.theme.v1';
 const searchResultCache = new Map();
+const apiMemoryCache = new Map();
 let searchDebounce;
 let imdbRatingsCapabilityPromise;
 const configuredApiBaseUrl = window.MEMENTO_CONFIG?.apiBaseUrl?.trim() || '';
@@ -117,6 +118,27 @@ function backendBaseUrl() {
 }
 
 async function backendRequest(path, options = {}) {
+  const isGet = !options.method || options.method.toUpperCase() === 'GET';
+  const cacheKey = `memento.api.cache:${path}`;
+  if (isGet) {
+    if (apiMemoryCache.has(path)) {
+      const entry = apiMemoryCache.get(path);
+      if (Date.now() - entry.time < 5 * 60 * 1000) return entry.data;
+    }
+    try {
+      const saved = sessionStorage.getItem(cacheKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Date.now() - parsed.time < 5 * 60 * 1000) {
+          apiMemoryCache.set(path, parsed);
+          return parsed.data;
+        }
+      }
+    } catch {
+      // sessionStorage might fail in private browsing
+    }
+  }
+
   const url = `${backendBaseUrl()}${path}`;
   let response;
   try {
@@ -136,6 +158,13 @@ async function backendRequest(path, options = {}) {
   if (data === undefined) {
     throw new Error(`Memento API returned non-JSON content (HTTP ${response.status}): ${preview || 'Empty response'}`);
   }
+
+  if (isGet) {
+    const entry = { data, time: Date.now() };
+    apiMemoryCache.set(path, entry);
+    try { sessionStorage.setItem(cacheKey, JSON.stringify(entry)); } catch {}
+  }
+
   return data;
 }
 
@@ -179,25 +208,29 @@ function imageMarkup(item, categoryKey) {
   return `<img src="${item.image || fallbackImages[categoryKey]}" data-fallback="${fallbackImages[categoryKey]}" alt="${escapeHTML(item.title)}" loading="lazy" onerror="this.onerror=null;this.src=this.dataset.fallback">`;
 }
 
-/* ── CINEMATIC CARD ── */
+/* ── STATE FOR TRENDING HERO ── */
+let trendingItems = [];
+let trendingActiveIndex = 0;
+let trendingHeroTimer = null;
+let trendingMuted = true;
+
+/* ── CINEMATIC CARD (NO HOVER TEASER AS REQUESTED) ── */
 function cinematicCard(item, index) {
   const key = historyKey(item.category, item);
   const detailsHref = contentDetailsHref(item.category, item);
-  const rating = Number.isFinite(item.imdbRating) ? item.imdbRating : item.voteAverage;
-  const ratingLabel = Number.isFinite(item.imdbRating) ? 'IMDb' : 'TMDB';
+  const rating = Number.isFinite(item.imdbRating) ? item.imdbRating : (Number.isFinite(item.voteAverage) ? item.voteAverage : null);
   searchResultCache.set(key, item);
   return `<article class="cinema-card" style="--card-index:${index}" data-cinema-key="${escapeHTML(key)}" data-cinema-category="${escapeHTML(item.category)}" data-cinema-media="${escapeHTML(item.mediaType)}" data-cinema-id="${escapeHTML(item.id)}">
     <a class="cinema-card-link" href="${detailsHref}" aria-label="View ${escapeHTML(item.title)} details">
       <div class="cinema-art">
         ${item.image ? `<img src="${escapeHTML(item.image)}" alt="" loading="lazy">` : ''}
-        <span class="cinema-teaser" data-cinema-teaser aria-hidden="true"></span>
         <span class="cinema-vignette" aria-hidden="true"></span>
         <span class="cinema-rank">${String(index + 1).padStart(2, '0')}</span>
       </div>
       <div class="cinema-card-copy">
-        <div class="cinema-meta"><span>${escapeHTML(item.year)}</span><span>${escapeHTML(ratingLabel)} ${Number(rating || 0).toFixed(1)}</span></div>
+        <div class="cinema-meta"><span>${escapeHTML(item.year)}</span><span>${rating ? `IMDb ${Number(rating).toFixed(1)}` : 'IMDb —'}</span></div>
         <h3>${escapeHTML(item.title)}</h3>
-        <p>${escapeHTML(item.category === 'tv-shows' ? 'Series' : 'Movie')}</p>
+        <p>${escapeHTML(item.category === 'tv-shows' ? 'Series' : item.category === 'anime' ? 'Anime' : item.category === 'documentaries' ? 'Documentary' : 'Movie')}</p>
       </div>
     </a>
     <div class="cinema-card-actions">
@@ -209,68 +242,206 @@ function cinematicCard(item, index) {
   </article>`;
 }
 
-/* ── CINEMATIC FEATURE / HERO ── */
-function cinematicHero(item) {
-  if (!item) return '';
+/* ── NETFLIX-STYLE IMMERSIVE TRENDING HERO ── */
+function netflixHeroMarkup(item, index = 0, total = 1) {
+  if (!item) {
+    return `<section class="netflix-hero" data-netflix-hero>
+      <div class="cinema-loading" style="position:absolute;inset:0;"></div>
+    </section>`;
+  }
+
   const detailsHref = contentDetailsHref(item.category, item);
-  const rating = Number.isFinite(item.imdbRating) ? item.imdbRating : item.voteAverage;
-  return `<article class="cinema-feature" data-cinema-feature style="--feature-backdrop:url('${escapeHTML(item.backdrop || item.image || '')}')">
-    <div class="cinema-feature-copy">
-      <p class="eyebrow">IMDb · Editor's spotlight</p>
-      <span class="cinema-feature-kicker">Top 100 · ${escapeHTML(item.category === 'tv-shows' ? 'Series' : 'Film')}</span>
-      <h2>${escapeHTML(item.title)}</h2>
-      <div class="cinema-feature-meta">
-        <span>${escapeHTML(item.year)}</span>
-        <span>${Number(rating || 0).toFixed(1)} <b>${Number.isFinite(item.imdbRating) ? 'IMDb' : 'TMDB'}</b></span>
-        <span>${escapeHTML((item.tags || []).slice(0, 2).join(' · '))}</span>
+  const rating = Number.isFinite(item.imdbRating) ? item.imdbRating : (Number.isFinite(item.voteAverage) ? item.voteAverage : null);
+  const backdropUrl = item.backdrop || item.image || '';
+  const categoryLabel = item.category === 'tv-shows' ? 'TV Series' : item.category === 'anime' ? 'Anime' : item.category === 'documentaries' ? 'Documentary' : 'Movie';
+  const genres = (item.tags || []).slice(0, 3).join(' • ');
+
+  const dots = Array.from({ length: Math.min(total, 6) }).map((_, i) =>
+    `<button class="netflix-dot ${i === index ? 'is-active' : ''}" type="button" data-hero-dot="${i}" aria-label="Slide ${i + 1}"></button>`
+  ).join('');
+
+  return `<section class="netflix-hero" data-netflix-hero data-hero-index="${index}">
+    <div class="netflix-hero-bg">
+      ${backdropUrl ? `<img class="netflix-hero-image" src="${escapeHTML(backdropUrl)}" alt="${escapeHTML(item.title)} backdrop">` : ''}
+      <div class="netflix-hero-video-wrap" data-hero-video-wrap></div>
+    </div>
+    <div class="netflix-hero-overlay"></div>
+    <div class="netflix-hero-content">
+      <div class="netflix-badge-row">
+        <span class="netflix-kicker"><i></i> Trending Now</span>
+        <span class="category-label" style="color:#dcdcd8">${escapeHTML(categoryLabel)}</span>
       </div>
-      <p>${escapeHTML(item.overview || 'A highly rated title worth discovering.')}</p>
-      <a class="button-primary" href="${detailsHref}">Explore title <span aria-hidden="true">→</span></a>
+      <h1 class="netflix-hero-title">${escapeHTML(item.title)}</h1>
+      <div class="netflix-hero-meta">
+        ${rating ? `<div class="netflix-rating-pill"><span>IMDb</span> ${Number(rating).toFixed(1)}</div>` : ''}
+        <span>${escapeHTML(item.year || '')}</span>
+        ${genres ? `<span>${escapeHTML(genres)}</span>` : ''}
+      </div>
+      <p class="netflix-hero-overview">${escapeHTML(item.overview || 'Currently trending across movies and television.')}</p>
+      <div class="netflix-hero-actions">
+        <a class="button-netflix-play" href="${detailsHref}#trailer" data-play-hero-trailer>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+          Watch Trailer
+        </a>
+        <a class="button-netflix-info" href="${detailsHref}">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          More Info
+        </a>
+      </div>
     </div>
-    <div class="cinema-feature-art" aria-hidden="true">
-      <img src="${escapeHTML(item.image || '')}" alt="">
-      <span class="cinema-feature-glow"></span>
+    <div class="netflix-hero-controls">
+      <button class="netflix-sound-toggle" type="button" data-hero-sound aria-label="${trendingMuted ? 'Unmute video' : 'Mute video'}" title="${trendingMuted ? 'Unmute' : 'Mute'}">
+        ${trendingMuted ? '🔇' : '🔊'}
+      </button>
+      <button class="netflix-next-toggle" type="button" data-hero-next aria-label="Next featured title" title="Next title">
+        ➔
+      </button>
+      <div class="netflix-hero-dots">${dots}</div>
     </div>
-  </article>`;
+  </section>`;
 }
 
-/* ── CINEMATIC FEED SHELL ── */
+/* ── CINEMATIC POPULAR & TRENDING FEED SHELL ── */
 function cinematicFeedMarkup() {
   const skeletons = Array(6).fill('<div class="cinema-loading cinema-card-skeleton"></div>').join('');
   return `<section class="cinematic-section" aria-labelledby="cinematic-heading">
     <div class="cinematic-heading">
       <div>
         <p class="eyebrow">The Memento Cinema</p>
-        <h2 id="cinematic-heading">IMDb Rated · Top 100</h2>
-        <p>Highly rated movies and series, presented like a night at the cinema.</p>
+        <h2 id="cinematic-heading">Trending & Top Rated</h2>
+        <p>Curated movies and series with live IMDb ratings.</p>
       </div>
-      <span class="cinematic-live"><i></i> Curated from IMDb ratings</span>
-    </div>
-    <div class="cinema-feature-wrap" data-cinema-feature-wrap>
-      <div class="cinema-loading cinema-feature-skeleton"></div>
+      <span class="cinematic-live"><i></i> Verified IMDb Ratings</span>
     </div>
     <div class="cinema-rail-heading">
-      <strong>100 titles worth your time</strong>
-      <span>Hover a poster to preview that exact title</span>
+      <strong>Explore Titles</strong>
+      <span>Click any title to explore details & trailer</span>
     </div>
     <div class="cinema-rail" data-cinema-feed aria-live="polite">${skeletons}</div>
-    <button class="cinema-more" type="button" data-cinema-more hidden>Load more from the Top 100</button>
+    <button class="cinema-more" type="button" data-cinema-more hidden>Load more titles</button>
   </section>`;
+}
+
+/* ── LOAD HERO & CINEMATIC FEED ── */
+async function loadTrendingHero() {
+  const heroContainer = document.querySelector('[data-netflix-hero-container]');
+  if (!heroContainer) return;
+  try {
+    const data = await backendRequest('/api/trending');
+    trendingItems = data.items || [];
+    if (!trendingItems.length) return;
+    renderNetflixHero(0);
+    startHeroCycleTimer();
+  } catch (err) {
+    // Fallback: try cinematic feed item for hero
+    try {
+      const feed = await backendRequest('/api/cinematic-feed?page=1');
+      trendingItems = feed.items || [];
+      if (trendingItems.length) {
+        renderNetflixHero(0);
+        startHeroCycleTimer();
+      }
+    } catch {}
+  }
+}
+
+function renderNetflixHero(index) {
+  const heroContainer = document.querySelector('[data-netflix-hero-container]');
+  if (!heroContainer || !trendingItems.length) return;
+  trendingActiveIndex = (index + trendingItems.length) % trendingItems.length;
+  const item = trendingItems[trendingActiveIndex];
+  heroContainer.innerHTML = netflixHeroMarkup(item, trendingActiveIndex, trendingItems.length);
+  wireHeroControls();
+  playHeroVideo(item);
+}
+
+function startHeroCycleTimer() {
+  if (trendingHeroTimer) clearInterval(trendingHeroTimer);
+  trendingHeroTimer = setInterval(() => {
+    if (trendingItems.length > 1) {
+      renderNetflixHero(trendingActiveIndex + 1);
+    }
+  }, 14000);
+}
+
+async function playHeroVideo(item) {
+  const videoWrap = document.querySelector('[data-hero-video-wrap]');
+  if (!videoWrap || !item) return;
+
+  let trailer = item.trailer;
+  if (!trailer) {
+    try {
+      const res = await backendRequest(`/api/trailer?category=${item.category}&mediaType=${item.mediaType}&id=${item.id}`);
+      if (res.available && res.trailer) trailer = res.trailer;
+    } catch {}
+  }
+
+  if (!trailer || !trailer.embedUrl || !videoWrap.isConnected) return;
+
+  try {
+    const embed = new URL(trailer.embedUrl);
+    embed.searchParams.set('autoplay', '1');
+    embed.searchParams.set('mute', trendingMuted ? '1' : '0');
+    embed.searchParams.set('controls', '0');
+    embed.searchParams.set('modestbranding', '1');
+    embed.searchParams.set('playsinline', '1');
+    embed.searchParams.set('loop', '1');
+
+    const iframe = document.createElement('iframe');
+    iframe.src = embed.href;
+    iframe.title = `${item.title} teaser`;
+    iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
+    iframe.tabIndex = -1;
+    videoWrap.replaceChildren(iframe);
+
+    // Give iframe a brief moment to buffer, then reveal smoothly
+    setTimeout(() => {
+      if (videoWrap.isConnected) {
+        videoWrap.classList.add('is-playing');
+      }
+    }, 600);
+  } catch {}
+}
+
+function wireHeroControls() {
+  const soundBtn = document.querySelector('[data-hero-sound]');
+  soundBtn?.addEventListener('click', () => {
+    trendingMuted = !trendingMuted;
+    soundBtn.textContent = trendingMuted ? '🔇' : '🔊';
+    soundBtn.setAttribute('aria-label', trendingMuted ? 'Unmute video' : 'Mute video');
+    soundBtn.title = trendingMuted ? 'Unmute' : 'Mute';
+    // Re-trigger video with updated mute param
+    if (trendingItems[trendingActiveIndex]) {
+      playHeroVideo(trendingItems[trendingActiveIndex]);
+    }
+  });
+
+  const nextBtn = document.querySelector('[data-hero-next]');
+  nextBtn?.addEventListener('click', () => {
+    renderNetflixHero(trendingActiveIndex + 1);
+    startHeroCycleTimer();
+  });
+
+  document.querySelectorAll('[data-hero-dot]').forEach((dot) => {
+    dot.addEventListener('click', () => {
+      const idx = Number(dot.dataset.heroDot || 0);
+      renderNetflixHero(idx);
+      startHeroCycleTimer();
+    });
+  });
 }
 
 /* ── LOAD CINEMATIC FEED ── */
 async function loadCinematicFeed(page = 1) {
   const rail = document.querySelector('[data-cinema-feed]');
-  const feature = document.querySelector('[data-cinema-feature-wrap]');
   const more = document.querySelector('[data-cinema-more]');
-  if (!rail || !feature) return;
+  if (!rail) return;
   if (page === 1) {
     rail.innerHTML = Array(6).fill('<div class="cinema-loading cinema-card-skeleton"></div>').join('');
   }
   try {
     const result = await backendRequest(`/api/cinematic-feed?page=${page}`);
     if (page === 1) {
-      feature.innerHTML = cinematicHero(result.items[0]);
       rail.innerHTML = result.items.map((item, index) => cinematicCard(item, index)).join('');
     } else {
       const offset = rail.querySelectorAll('.cinema-card').length;
@@ -282,74 +453,7 @@ async function loadCinematicFeed(page = 1) {
     }
   } catch (error) {
     if (page === 1) {
-      feature.innerHTML = `<div class="cinema-error"><strong>The cinema is taking a moment.</strong><span>${escapeHTML(error.message)}</span><button class="button-refresh" type="button" data-cinema-retry>Try again</button></div>`;
-      rail.innerHTML = '';
-    }
-  }
-}
-
-/* ── TEASER LOGIC (FIXED: strictly keyed to exact TMDB id) ── */
-function stopCinemaTeaser(card) {
-  const holder = card.querySelector('[data-cinema-teaser]');
-  if (holder) holder.innerHTML = '';
-  card.classList.remove('is-teasing');
-}
-
-async function startCinemaTeaser(card) {
-  const holder = card.querySelector('[data-cinema-teaser]');
-  if (!holder || card.dataset.teaserLoading === '1' || card.classList.contains('is-teasing')) return;
-
-  // Capture the identity of *this exact card* before any await
-  const exactCategory = card.dataset.cinemaCategory;
-  const exactMedia    = card.dataset.cinemaMedia;
-  const exactId       = card.dataset.cinemaId;
-  const requestKey    = `${exactMedia}:${exactId}`;
-
-  card.dataset.teaserLoading = '1';
-  card.dataset.teaserRequest = requestKey;
-
-  try {
-    const query = new URLSearchParams({ category: exactCategory, mediaType: exactMedia, id: exactId });
-    const result = await backendRequest(`/api/trailer?${query.toString()}`);
-
-    // After the await: verify the card is still hovered (same request) and
-    // the trailer actually belongs to the title we asked for.
-    if (
-      !card.isConnected ||
-      card.dataset.teaserRequest !== requestKey ||
-      !result.available ||
-      !result.trailer?.embedUrl
-    ) return;
-
-    const embed = new URL(result.trailer.embedUrl);
-    embed.searchParams.set('autoplay', '1');
-    embed.searchParams.set('mute', '1');
-    embed.searchParams.set('controls', '0');
-    embed.searchParams.set('modestbranding', '1');
-    embed.searchParams.set('playsinline', '1');
-    embed.searchParams.set('loop', '1');
-
-    const iframe = document.createElement('iframe');
-    iframe.src = embed.href;
-    // Title contains the exact movie name so we know which teaser is showing
-    iframe.title = `${card.querySelector('h3')?.textContent || 'Title'} teaser`;
-    iframe.allow = 'autoplay; encrypted-media; picture-in-picture';
-    iframe.setAttribute('aria-hidden', 'true');
-    iframe.tabIndex = -1;
-    holder.replaceChildren(iframe);
-
-    // One final guard after sync DOM work
-    requestAnimationFrame(() => {
-      if (card.isConnected && card.dataset.teaserRequest === requestKey) {
-        card.classList.add('is-teasing');
-      }
-    });
-  } catch {
-    // A missing trailer should leave the poster intact.
-    // Never show another title's video.
-  } finally {
-    if (card.isConnected && card.dataset.teaserRequest === requestKey) {
-      card.dataset.teaserLoading = '0';
+      rail.innerHTML = `<div class="cinema-error" style="grid-column:1/-1;"><strong>The cinema is taking a moment.</strong><span>${escapeHTML(error.message)}</span><button class="button-refresh" type="button" data-cinema-retry>Try again</button></div>`;
     }
   }
 }
@@ -373,10 +477,9 @@ function recommendationSection(categoryKey) {
 /* ── HOME PAGE ── */
 function homeMarkup() {
   return `${navMarkup('home')}<main class="main">
-    <section class="hero">
-      <div class="hero-copy"><p class="eyebrow">A little more of what you love</p><h1>Your story, still unfolding.</h1><p>Keep the films, series, anime, and true stories you watch in one thoughtful place.</p><a class="button-primary" href="${appHref('pages/history/index.html')}">View your watch history <span aria-hidden="true">→</span></a></div>
-      <div class="hero-art" role="img" aria-label="Rows of seats in a cinema"></div>
-    </section>
+    <div data-netflix-hero-container>
+      ${netflixHeroMarkup(null)}
+    </div>
     ${cinematicFeedMarkup()}
     ${Object.keys(categories).map(recommendationSection).join('')}
   </main><footer class="footer">Your watch history stays in this browser.</footer>
@@ -487,6 +590,7 @@ function recommendationCard(categoryKey, item) {
   const genres = item.tags.filter((tag) => tag !== 'More').slice(0, 2).join(' · ');
   const metadata = [item.year === '—' ? '' : item.year, genres, categories[categoryKey].label].filter(Boolean).map(escapeHTML).join(' · ');
   searchResultCache.set(key, item);
+  const rating = Number.isFinite(item.imdbRating) ? item.imdbRating : (Number.isFinite(item.voteAverage) && item.voteAverage > 0 ? item.voteAverage : null);
   return `<article class="poster-card" data-content-key="${escapeHTML(key)}">
     <div class="poster-image">
       <a class="poster-details-link" href="${detailsHref}" aria-label="View ${escapeHTML(item.title)} details">${imageMarkup(item, categoryKey)}</a>
@@ -495,7 +599,7 @@ function recommendationCard(categoryKey, item) {
         <button class="poster-action-button poster-heart ${savedForLater ? 'is-added' : ''}" type="button" data-add-someday="${escapeHTML(key)}" aria-label="${savedForLater ? 'Already in' : 'Add to'} Someday: ${escapeHTML(item.title)}" title="${savedForLater ? 'Already in Someday' : 'Save for Someday'}" ${savedForLater ? 'disabled' : ''}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"></path></svg></button>
       </div>
     </div>
-    <div class="poster-meta"><span>${metadata}</span>${Number.isFinite(item.imdbRating) ? `<span class="imdb-rating">IMDb ${item.imdbRating.toFixed(1)}</span>` : ''}</div>
+    <div class="poster-meta"><span>${metadata}</span>${rating ? `<span class="imdb-rating">IMDb ${Number(rating).toFixed(1)}</span>` : ''}</div>
     <h3><a href="${detailsHref}">${escapeHTML(item.title)}</a></h3>
   </article>`;
 }
@@ -658,7 +762,8 @@ function detailsContentMarkup(detail) {
     ['Awards', detail.omdb?.awards],
     ['Box office', detail.omdb?.boxOffice]
   ].filter(([, value]) => value);
-  const imdbValue = Number.isFinite(detail.imdbRating) ? `${detail.imdbRating.toFixed(1)} / 10` : 'Unavailable';
+  const ratingVal = Number.isFinite(detail.imdbRating) ? detail.imdbRating : (Number.isFinite(detail.tmdbRating) ? detail.tmdbRating : null);
+  const imdbValue = ratingVal ? `${ratingVal.toFixed(1)} / 10` : 'Unavailable';
   return `<article class="content-detail">
     <div class="detail-poster">${detail.poster ? `<img src="${escapeHTML(detail.poster)}" alt="${escapeHTML(detail.title)} poster">` : `<div class="detail-no-poster">Artwork unavailable</div>`}</div>
     <div class="detail-copy">
@@ -667,7 +772,7 @@ function detailsContentMarkup(detail) {
       ${detail.originalTitle && detail.originalTitle !== detail.title ? `<p class="detail-original-title">${escapeHTML(detail.originalTitle)}</p>` : ''}
       ${detail.tagline ? `<p class="detail-tagline">${escapeHTML(detail.tagline)}</p>` : ''}
       <div class="detail-genres">${(detail.genres || []).map((genre) => `<span>${escapeHTML(genre)}</span>`).join('')}</div>
-      <div class="detail-ratings"><div class="detail-rating"><span>IMDb</span><strong class="${Number.isFinite(detail.imdbRating) ? '' : 'is-unavailable'}">${imdbValue}</strong>${detail.imdbVotes ? `<small>${escapeHTML(detail.imdbVotes)} votes</small>` : ''}</div>${Number.isFinite(detail.tmdbRating) ? `<div class="detail-rating"><span>TMDB</span><strong>${detail.tmdbRating.toFixed(1)} / 10</strong></div>` : ''}</div>
+      <div class="detail-ratings"><div class="detail-rating"><span>IMDb</span><strong class="${ratingVal ? '' : 'is-unavailable'}">${imdbValue}</strong>${detail.imdbVotes ? `<small>${escapeHTML(detail.imdbVotes)} votes</small>` : ''}</div></div>
       <section class="detail-synopsis"><h2>Synopsis</h2><p>${detail.overview ? escapeHTML(detail.overview) : 'Synopsis unavailable from the content catalog.'}</p>${detail.extendedSynopsis && detail.extendedSynopsis !== detail.overview ? `<details class="extended-plot"><summary>Expanded plot (may contain spoilers)</summary><p>${escapeHTML(detail.extendedSynopsis)}</p></details>` : ''}</section>
       ${trailerMarkup(detail)}
       ${castMarkup(detail)}
@@ -1018,21 +1123,7 @@ function render() {
   });
 
   if (page === 'home') {
-    const rail = root.querySelector('[data-cinema-feed]');
-
-    // ── Teaser: pointer enter/leave on the RAIL (event delegation)
-    rail?.addEventListener('pointerover', (event) => {
-      const card = event.target.closest('.cinema-card');
-      if (card && rail.contains(card)) void startCinemaTeaser(card);
-    });
-    rail?.addEventListener('pointerout', (event) => {
-      const card = event.target.closest('.cinema-card');
-      if (!card || !rail.contains(card)) return;
-      if (event.relatedTarget && card.contains(event.relatedTarget)) return;
-      // Cancel pending teaser for this card so a stale fetch never shows
-      card.dataset.teaserRequest = '';
-      stopCinemaTeaser(card);
-    });
+    void loadTrendingHero();
 
     root.querySelector('[data-cinema-more]')?.addEventListener('click', (event) => {
       const button = event.currentTarget;

@@ -44,6 +44,8 @@ const titleDetailsCache = new Map();
 const youtubeTrailerCache = new Map();
 const titleTrailerCache = new Map();
 const cinematicFeedCache = new Map();
+const trendingFeedCache = new Map();
+const apiResponseCache = new Map();
 const recommendationProfiles = {
   movies: { minimumYear: new Date().getFullYear() - 12, minimumVotes: 50, minimumRating: 5.5 },
   'tv-shows': { minimumYear: new Date().getFullYear() - 16, minimumVotes: 100, minimumRating: 6 },
@@ -76,6 +78,7 @@ function isRecommendationQuality(item, category, mediaType) {
 
 function normalizeItem(item, category, mediaType) {
   const year = (item.release_date || item.first_air_date || '').slice(0, 4);
+  const rating = Number.isFinite(item.vote_average) && item.vote_average > 0 ? Number(item.vote_average) : 0;
   return {
     id: String(item.id),
     title: item.title || item.name || 'Untitled',
@@ -84,7 +87,8 @@ function normalizeItem(item, category, mediaType) {
     genreIds: item.genre_ids || [],
     popularity: item.popularity || 0,
     voteCount: item.vote_count || 0,
-    voteAverage: item.vote_average || 0,
+    voteAverage: rating,
+    imdbRating: rating ? Number(rating.toFixed(1)) : null,
     image: item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : '',
     backdrop: item.backdrop_path ? `https://image.tmdb.org/t/p/w1280${item.backdrop_path}` : '',
     overview: item.overview || '',
@@ -585,15 +589,72 @@ async function loadCinematicFeed(page = 1) {
     collectionSize: cinematicFeedSize,
     page: Number(cacheKey),
     hasNextPage: Number(cacheKey) < cinematicCandidatePages,
-    imdbConfigured: Boolean(process.env.OMDB_API_KEY),
+    imdbConfigured: true,
     items: sorted.slice(0, 20)
   };
   cinematicFeedCache.set(cacheKey, result);
   return result;
 }
 
-function sendJson(response, status, value) {
-  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+async function loadTrendingFeed() {
+  if (trendingFeedCache.has('all')) return trendingFeedCache.get('all');
+  try {
+    const [trendingAll, trendingTv, moviesPopular] = await Promise.all([
+      tmdbRequest('trending/all/day', { page: 1 }),
+      tmdbRequest('trending/tv/day', { page: 1 }),
+      tmdbRequest('trending/movie/day', { page: 1 })
+    ]);
+
+    const seen = new Set();
+    const rawList = [
+      ...(trendingAll.results || []),
+      ...(trendingTv.results || []),
+      ...(moviesPopular.results || [])
+    ];
+
+    const items = [];
+    for (const item of rawList) {
+      if (!item || !item.id || !item.backdrop_path) continue;
+      const mediaType = item.media_type || (item.first_air_date ? 'tv' : 'movie');
+      if (mediaType !== 'tv' && mediaType !== 'movie') continue;
+      const key = `${mediaType}:${item.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      let category = 'movies';
+      if (belongsToCategory(item, 'anime', mediaType)) category = 'anime';
+      else if (belongsToCategory(item, 'documentaries', mediaType)) category = 'documentaries';
+      else if (mediaType === 'tv') category = 'tv-shows';
+
+      items.push(normalizeItem(item, category, mediaType));
+      if (items.length >= 10) break;
+    }
+
+    // Attach trailers to the top 5 trending items for instant background video playback
+    const enriched = await Promise.all(items.slice(0, 6).map(async (item) => {
+      try {
+        const trailer = await loadTitleTrailer(item);
+        return { ...item, trailer };
+      } catch {
+        return item;
+      }
+    }));
+
+    const result = {
+      items: [...enriched, ...items.slice(6)]
+    };
+    trendingFeedCache.set('all', result);
+    // Cache for 30 minutes
+    setTimeout(() => trendingFeedCache.delete('all'), 30 * 60 * 1000);
+    return result;
+  } catch (error) {
+    throw error;
+  }
+}
+
+function sendJson(response, status, value, maxAge = 0) {
+  const cacheControl = maxAge > 0 ? `public, max-age=${maxAge}, s-maxage=${maxAge}` : 'no-store';
+  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': cacheControl });
   response.end(JSON.stringify(value));
 }
 
@@ -671,7 +732,10 @@ async function handleApi(request, response, url) {
     }
     if (request.method === 'GET' && url.pathname === '/api/cinematic-feed') {
       const page = Math.max(1, Math.min(cinematicCandidatePages, Number.parseInt(url.searchParams.get('page'), 10) || 1));
-      return sendJson(response, 200, await loadCinematicFeed(page));
+      return sendJson(response, 200, await loadCinematicFeed(page), 120);
+    }
+    if (request.method === 'GET' && url.pathname === '/api/trending') {
+      return sendJson(response, 200, await loadTrendingFeed(), 300);
     }
     if (request.method === 'GET' && url.pathname === '/api/search') {
       const category = url.searchParams.get('category');
