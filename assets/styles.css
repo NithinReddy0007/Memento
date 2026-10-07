@@ -280,17 +280,17 @@ h1 {
   inset: 0;
   z-index: 1;
   background:
-    linear-gradient(to right, rgba(4,4,8,.95) 0%, rgba(4,4,8,.82) 36%, rgba(4,4,8,.4) 65%, rgba(4,4,8,0) 100%),
-    linear-gradient(to top, #040408 0%, rgba(4,4,8,.85) 18%, rgba(4,4,8,.2) 50%, transparent 100%),
-    linear-gradient(to bottom, rgba(4,4,8,.6) 0%, transparent 25%);
+    linear-gradient(to right, rgba(4,4,8,.88) 0%, rgba(4,4,8,.68) 32%, rgba(4,4,8,.25) 60%, rgba(4,4,8,0) 100%),
+    linear-gradient(to top, #040408 0%, rgba(4,4,8,.75) 15%, rgba(4,4,8,.1) 45%, transparent 100%),
+    linear-gradient(to bottom, rgba(4,4,8,.45) 0%, transparent 20%);
   pointer-events: none;
 }
 
 :root[data-theme='light'] .netflix-hero-overlay {
   background:
-    linear-gradient(to right, rgba(4,4,8,.95) 0%, rgba(4,4,8,.82) 36%, rgba(4,4,8,.4) 65%, rgba(4,4,8,0) 100%),
-    linear-gradient(to top, var(--paper) 0%, rgba(4,4,8,.85) 18%, rgba(4,4,8,.2) 50%, transparent 100%),
-    linear-gradient(to bottom, rgba(4,4,8,.6) 0%, transparent 25%);
+    linear-gradient(to right, rgba(4,4,8,.88) 0%, rgba(4,4,8,.68) 32%, rgba(4,4,8,.25) 60%, rgba(4,4,8,0) 100%),
+    linear-gradient(to top, var(--paper) 0%, rgba(4,4,8,.75) 15%, rgba(4,4,8,.1) 45%, transparent 100%),
+    linear-gradient(to bottom, rgba(4,4,8,.45) 0%, transparent 20%);
 }
 
 .netflix-hero-content {
@@ -349,8 +349,8 @@ h1 {
   font-weight: 700;
   line-height: 1.02;
   letter-spacing: -.03em;
-  color: #fff;
-  text-shadow: 0 4px 24px rgba(0,0,0,.8);
+  color: #ffffff;
+  text-shadow: 0 4px 28px rgba(0,0,0,.95), 0 1px 3px rgba(0,0,0,.9);
 }
 
 .netflix-hero-meta {
@@ -358,9 +358,10 @@ h1 {
   align-items: center;
   gap: 12px 16px;
   flex-wrap: wrap;
-  font-size: 12px;
-  color: #dcdcd8;
-  text-shadow: 0 2px 8px rgba(0,0,0,.8);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #eaeae4;
+  text-shadow: 0 2px 10px rgba(0,0,0,.9);
 }
 
 .netflix-rating-pill {
@@ -382,16 +383,16 @@ h1 {
 
 .netflix-hero-overview {
   margin: 0;
-  font-size: clamp(13px, 1.1vw, 15px);
-  line-height: 1.65;
-  color: #deded8;
-  max-width: 600px;
+  font-size: clamp(13.5px, 1.15vw, 15.5px);
+  line-height: 1.68;
+  color: #f0f0ea;
+  max-width: 620px;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   line-clamp: 3;
   overflow: hidden;
-  text-shadow: 0 2px 10px rgba(0,0,0,.9);
+  text-shadow: 0 2px 12px rgba(0,0,0,.95), 0 1px 4px rgba(0,0,0,.9);
 }
 
 .netflix-hero-actions {
