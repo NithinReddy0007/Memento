@@ -1,10 +1,10 @@
 const categories = {
-  movies: { label: 'Movies', singular: 'movie', page: 'pages/movies/index.html', color: '#c5755d', wash: '#f1ddd2', description: 'Feature films, remembered and found again.' },
+  movies: { label: 'Movies', singular: 'movie', page: 'pages/movies/index.html', color: '#da525d', wash: '#efc3c1', description: 'Feature films, remembered and found again.' },
   'tv-shows': {
-    label: 'TV Shows', singular: 'TV show', page: 'pages/tv-shows/index.html', color: '#4b7785', wash: '#d9e8e7', description: 'Series worth staying with, episode by episode.'
+    label: 'TV Shows', singular: 'TV show', page: 'pages/tv-shows/index.html', color: '#96d1aa', wash: '#dbe9d8', description: 'Series worth staying with, episode by episode.'
   },
-  anime: { label: 'Anime', singular: 'anime', page: 'pages/anime/index.html', color: '#a66783', wash: '#f0dfe8', description: 'Animated worlds, from quiet moments to big adventures.' },
-  documentaries: { label: 'Documentaries', singular: 'documentary', page: 'pages/documentaries/index.html', color: '#a58145', wash: '#ede7d5', description: 'True stories and real worlds, carefully collected.' }
+  anime: { label: 'Anime', singular: 'anime', page: 'pages/anime/index.html', color: '#b984af', wash: '#e5d2da', description: 'Animated worlds, from quiet moments to big adventures.' },
+  documentaries: { label: 'Documentaries', singular: 'documentary', page: 'pages/documentaries/index.html', color: '#c59f6b', wash: '#e9dac5', description: 'True stories and real worlds, carefully collected.' }
 };
 
 const storageKey = 'memento.watchHistory.v1';
@@ -271,7 +271,7 @@ function netflixHeroMarkup(item, index = 0, total = 1) {
     <div class="netflix-hero-content">
       <div class="netflix-badge-row">
         <span class="netflix-kicker"><i></i> Trending Now</span>
-        <span class="category-label" style="color:#dcdcd8">${escapeHTML(categoryLabel)}</span>
+        <span class="category-label" style="color:var(--cinema-soft)">${escapeHTML(categoryLabel)}</span>
       </div>
       <h1 class="netflix-hero-title">${escapeHTML(item.title)}</h1>
       <div class="netflix-hero-meta">
@@ -1564,7 +1564,7 @@ function setTheme(theme) {
   }
   // Update theme-color meta
   const metaTheme = document.querySelector('meta[name="theme-color"]');
-  if (metaTheme) metaTheme.content = nextTheme === 'dark' ? '#050508' : '#f6f5f1';
+  if (metaTheme) metaTheme.content = nextTheme === 'dark' ? '#050405' : '#da525d';
 }
 
 /* ── RECOMMENDATIONS ── */
