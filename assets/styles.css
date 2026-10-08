@@ -1801,51 +1801,59 @@ h1 {
 }
 
 /* ════════════════════════════════════════════════
-   ANALYSIS DASHBOARD (NIXTIO HR DASHBOARD INSPIRED)
-   Clean modular card geometry, refined metric typography,
-   soft subtle borders, and crisp data-visualization hierarchy
+   AGROCONTROL-INSPIRED CLEAN ANALYSIS DASHBOARD
+   Clear information hierarchy, grounded card geometry,
+   monoline SVG icons, authentic podium layout, and
+   restrained typography (Zero AI-cliché effects).
    ════════════════════════════════════════════════ */
-.analysis-dashboard-header {
+
+.analysis-main-clean {
+  padding-bottom: 60px;
+}
+
+.analysis-clean-header {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 20px;
+  gap: 24px;
   margin-bottom: 28px;
   flex-wrap: wrap;
 }
 
-.analysis-header-copy h1 {
+.analysis-clean-title {
   margin: 0 0 6px;
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
   letter-spacing: -.03em;
   color: var(--ink);
+  line-height: 1.15;
 }
 
-.analysis-header-copy p {
+.analysis-clean-subtitle {
   margin: 0;
   color: var(--muted);
   font-size: 13.5px;
+  line-height: 1.4;
 }
 
-/* Scope Selector Tabs - Clean modern pill bar (Nixtio style) */
+/* Scope Selector Tabs - Clean, tactile pill switch */
 .analysis-segmented-tabs {
   display: inline-flex;
   align-items: center;
-  padding: 5px;
-  background: var(--white);
+  padding: 4px;
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 30px;
-  gap: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border-radius: 12px;
+  gap: 3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
 .analysis-tab-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
-  border-radius: 20px;
+  padding: 7px 15px;
+  border-radius: 9px;
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -1858,60 +1866,64 @@ h1 {
 
 .analysis-tab-btn:hover {
   color: var(--ink);
+  background: var(--hover-surface);
 }
 
 .analysis-tab-btn.is-active {
-  background: var(--p-teal);
-  color: var(--on-accent);
-  box-shadow: 0 3px 12px rgba(98, 198, 191, 0.28);
+  background: var(--white);
+  color: var(--ink);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   font-weight: 700;
+}
+
+:root[data-theme='dark'] .analysis-tab-btn.is-active {
+  background: var(--hover-surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
 }
 
 .analysis-tab-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 1px 7px;
-  border-radius: 12px;
-  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 10px;
   font-weight: 700;
-  background: var(--hover-surface);
-  color: var(--ink);
+  background: var(--line);
+  color: var(--muted);
   min-width: 18px;
 }
 
 .analysis-tab-btn.is-active .analysis-tab-badge {
-  background: rgba(11, 26, 25, 0.2);
-  color: var(--on-accent);
+  background: rgba(98, 198, 191, 0.2);
+  color: var(--c-green-text);
 }
 
-/* Primary Metric Cards Grid (Nixtio HR Stats Card Style) */
+/* ── Primary Metric KPI Cards (AgroControl Tile Architecture) ── */
 .analysis-metrics-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 18px;
-  margin-bottom: 28px;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .analysis-metric-card {
-  position: relative;
-  overflow: hidden;
-  padding: 22px;
-  background: var(--white);
+  padding: 20px 22px;
+  background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   gap: 14px;
-  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
 }
 
 .analysis-metric-card:hover {
-  transform: translateY(-3px);
-  border-color: var(--p-teal);
-  box-shadow: 0 10px 28px rgba(98, 198, 191, 0.12);
+  border-color: rgba(98, 198, 191, 0.5);
+  transform: translateY(-2px);
 }
 
 .analysis-metric-top {
@@ -1929,40 +1941,23 @@ h1 {
 }
 
 .analysis-metric-icon-wrap {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
   display: grid;
   place-items: center;
-  font-size: 16px;
   background: var(--hover-surface);
-  color: var(--ink);
-  transition: transform var(--transition-fast);
-}
-
-.analysis-metric-card:nth-child(1) .analysis-metric-icon-wrap {
-  background: rgba(98, 198, 191, 0.16);
   color: var(--c-green-text);
-}
-.analysis-metric-card:nth-child(2) .analysis-metric-icon-wrap {
-  background: rgba(248, 182, 186, 0.28);
-  color: #8c3b42;
-}
-.analysis-metric-card:nth-child(3) .analysis-metric-icon-wrap {
-  background: rgba(154, 114, 170, 0.18);
-  color: #643f74;
-}
-.analysis-metric-card:nth-child(4) .analysis-metric-icon-wrap {
-  background: rgba(98, 198, 191, 0.14);
-  color: var(--c-green-text);
+  border: 1px solid var(--line);
+  flex-shrink: 0;
 }
 
 .analysis-metric-value {
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 700;
   letter-spacing: -.03em;
   color: var(--ink);
-  line-height: 1.05;
+  line-height: 1;
 }
 
 .analysis-metric-sub {
@@ -1976,29 +1971,28 @@ h1 {
 .analysis-metric-pill {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
+  padding: 2px 7px;
   border-radius: 6px;
   font-size: 10.5px;
-  font-weight: 700;
-  background: rgba(98, 198, 191, 0.16);
+  font-weight: 600;
+  background: rgba(98, 198, 191, 0.14);
   color: var(--c-green-text);
 }
 
-/* Dashboard Panels (Nixtio Dashboard Grid Layout) */
+/* ── Panel Grid (AgroControl Structured Layout) ── */
 .analysis-grid-2col {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 22px;
-  margin-bottom: 28px;
+  gap: 20px;
+  margin-bottom: 24px;
 }
 
 .analysis-panel {
   padding: 24px;
-  background: var(--white);
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 16px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
   display: flex;
   flex-direction: column;
 }
@@ -2015,12 +2009,18 @@ h1 {
 .analysis-panel-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
+  color: var(--ink);
+}
+
+.analysis-panel-title svg {
+  color: var(--c-green-text);
+  flex-shrink: 0;
 }
 
 .analysis-panel-title h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: -.02em;
   color: var(--ink);
@@ -2032,15 +2032,15 @@ h1 {
   font-weight: 500;
 }
 
-/* ── PODIUM DISPLAY (Nixtio Top Performer Cards) ── */
+/* ── Clean Podium Presentation (Authentic, Non-Gimmicky) ── */
 .analysis-podium-stage {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  gap: 14px;
-  padding: 20px 12px 14px;
-  margin-bottom: 20px;
-  background: linear-gradient(180deg, rgba(98, 198, 191, 0.06) 0%, transparent 100%);
+  gap: 12px;
+  padding: 16px 10px 0;
+  margin-bottom: 22px;
+  background: var(--paper);
   border-radius: 14px;
   border: 1px solid var(--line);
 }
@@ -2053,75 +2053,78 @@ h1 {
   text-align: center;
   min-width: 0;
   max-width: 140px;
-  position: relative;
 }
 
 .analysis-podium-step.is-empty {
   visibility: hidden;
 }
 
-.analysis-podium-avatar-wrap {
+.analysis-podium-card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 8px 8px;
   position: relative;
+}
+
+.analysis-podium-badge {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 6px;
+  letter-spacing: .4px;
   margin-bottom: 8px;
 }
 
-.analysis-podium-crown {
-  position: absolute;
-  top: -9px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 9.5px;
-  font-weight: 800;
-  padding: 2px 7px;
-  border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  z-index: 2;
-  letter-spacing: .4px;
+.podium-rank-1 .analysis-podium-badge {
+  background: rgba(98, 198, 191, 0.18);
+  color: var(--c-green-text);
+  border: 1px solid rgba(98, 198, 191, 0.35);
 }
 
-.podium-rank-1 .analysis-podium-crown {
-  background: var(--p-teal);
-  color: var(--on-accent);
+.podium-rank-2 .analysis-podium-badge {
+  background: rgba(248, 182, 186, 0.22);
+  color: #8c3b42;
+  border: 1px solid rgba(248, 182, 186, 0.4);
 }
-.podium-rank-2 .analysis-podium-crown {
-  background: var(--p-pink);
-  color: #3b1419;
-}
-.podium-rank-3 .analysis-podium-crown {
-  background: var(--p-mauve);
-  color: #ffffff;
+
+.podium-rank-3 .analysis-podium-badge {
+  background: rgba(154, 114, 170, 0.16);
+  color: #643f74;
+  border: 1px solid rgba(154, 114, 170, 0.3);
 }
 
 .analysis-podium-avatar {
   border-radius: 12px;
   overflow: hidden;
-  background: var(--white);
+  background: var(--surface);
   display: grid;
   place-items: center;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
-  transition: transform .2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: transform var(--transition-fast);
 }
 
 .podium-rank-1 .analysis-podium-avatar {
-  width: 64px;
-  height: 64px;
-  border: 2.5px solid var(--p-teal);
+  width: 58px;
+  height: 58px;
+  border: 2px solid var(--p-teal);
 }
 
 .podium-rank-2 .analysis-podium-avatar {
-  width: 54px;
-  height: 54px;
-  border: 2px solid var(--p-pink);
+  width: 48px;
+  height: 48px;
+  border: 1.5px solid var(--p-pink);
 }
 
 .podium-rank-3 .analysis-podium-avatar {
-  width: 50px;
-  height: 50px;
-  border: 2px solid var(--p-mauve);
+  width: 44px;
+  height: 44px;
+  border: 1.5px solid var(--p-mauve);
 }
 
 .analysis-podium-step:hover .analysis-podium-avatar {
-  transform: translateY(-3px) scale(1.05);
+  transform: translateY(-2px);
 }
 
 .analysis-podium-avatar img {
@@ -2132,22 +2135,22 @@ h1 {
 
 .analysis-podium-initials {
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--ink);
 }
 
 .analysis-podium-info {
+  margin-top: 8px;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin-bottom: 8px;
   width: 100%;
   overflow: hidden;
 }
 
 .analysis-podium-name {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
@@ -2156,89 +2159,94 @@ h1 {
 
 .analysis-podium-score {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--c-green-text);
 }
 
-.analysis-podium-score small {
-  font-size: 9.5px;
+.analysis-podium-unit {
+  font-size: 10px;
   font-weight: 500;
   color: var(--muted);
 }
 
-.analysis-podium-pillar {
+/* Solid, clean architectural pedestals */
+.analysis-podium-pedestal {
   width: 100%;
   border-radius: 8px 8px 0 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--hover-surface);
+  background: var(--surface);
   border: 1px solid var(--line);
   border-bottom: 0;
 }
 
-.podium-rank-1 .analysis-podium-pillar {
-  height: 68px;
-  background: linear-gradient(180deg, rgba(98, 198, 191, 0.22) 0%, rgba(98, 198, 191, 0.05) 100%);
-  border-color: rgba(98, 198, 191, 0.4);
+.podium-rank-1 .analysis-podium-pedestal {
+  height: 54px;
+  background: var(--surface);
+  border-top: 2px solid var(--p-teal);
 }
 
-.podium-rank-2 .analysis-podium-pillar {
-  height: 48px;
-  background: linear-gradient(180deg, rgba(248, 182, 186, 0.25) 0%, rgba(248, 182, 186, 0.05) 100%);
-  border-color: rgba(248, 182, 186, 0.4);
+.podium-rank-2 .analysis-podium-pedestal {
+  height: 38px;
+  background: var(--surface);
+  border-top: 2px solid var(--p-pink);
 }
 
-.podium-rank-3 .analysis-podium-pillar {
-  height: 36px;
-  background: linear-gradient(180deg, rgba(154, 114, 170, 0.22) 0%, rgba(154, 114, 170, 0.05) 100%);
-  border-color: rgba(154, 114, 170, 0.4);
+.podium-rank-3 .analysis-podium-pedestal {
+  height: 26px;
+  background: var(--surface);
+  border-top: 2px solid var(--p-mauve);
 }
 
-.analysis-podium-rank-tag {
-  font-size: 9.5px;
+.analysis-pedestal-num {
+  font-size: 11px;
   font-weight: 800;
-  letter-spacing: .8px;
   color: var(--muted);
+}
+
+.analysis-empty-people {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 12.5px;
 }
 
 .analysis-lb-section-sub {
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: .6px;
+  letter-spacing: .5px;
   color: var(--muted);
-  margin: 6px 0 10px;
+  margin: 4px 0 10px;
 }
 
-/* ── LEADERBOARD LIST (Nixtio Team Member Row Style) ── */
+/* ── Leaderboard Runner-up Rows ── */
 .analysis-lb-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .analysis-lb-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 14px;
-  border-radius: 10px;
+  padding: 8px 12px;
+  border-radius: 9px;
   background: var(--paper);
   border: 1px solid var(--line);
-  transition: all .18s ease;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
 }
 
 .analysis-lb-row:hover {
   border-color: var(--p-teal);
-  background: var(--white);
-  transform: translateX(3px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+  background: var(--surface);
 }
 
 .analysis-lb-rank {
-  width: 26px;
-  font-size: 11.5px;
+  width: 24px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--muted);
   text-align: center;
@@ -2246,9 +2254,9 @@ h1 {
 }
 
 .analysis-lb-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
   overflow: hidden;
   background: var(--line);
   flex-shrink: 0;
@@ -2263,7 +2271,7 @@ h1 {
 }
 
 .analysis-lb-initials {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   color: var(--ink);
 }
@@ -2276,7 +2284,7 @@ h1 {
 }
 
 .analysis-lb-name {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--ink);
   white-space: nowrap;
@@ -2285,7 +2293,7 @@ h1 {
 }
 
 .analysis-lb-titles {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
@@ -2297,20 +2305,20 @@ h1 {
   flex-direction: column;
   align-items: flex-end;
   gap: 3px;
-  min-width: 60px;
+  min-width: 50px;
   flex-shrink: 0;
 }
 
 .analysis-lb-count {
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
 
 .analysis-lb-bar-wrap {
-  width: 52px;
-  height: 4px;
+  width: 44px;
+  height: 3.5px;
   background: var(--line);
   border-radius: 999px;
   overflow: hidden;
@@ -2323,21 +2331,21 @@ h1 {
 }
 
 .analysis-lb-expand-btn {
-  margin-top: 12px;
+  margin-top: 10px;
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 9px 14px;
+  padding: 8px 12px;
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 9px;
   color: var(--ink);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: all .2s ease;
+  transition: all var(--transition-fast);
 }
 
 .analysis-lb-expand-btn:hover {
@@ -2349,7 +2357,7 @@ h1 {
 .analysis-lb-expand-btn svg {
   width: 14px;
   height: 14px;
-  transition: transform .2s ease;
+  transition: transform var(--transition-fast);
 }
 
 .analysis-lb-expand-btn.is-expanded svg {
@@ -2360,24 +2368,24 @@ h1 {
   display: none !important;
 }
 
-/* ── PROGRESS BARS (Nixtio Skill Matrix Bars) ── */
+/* ── Genre Distribution Progress Bars ── */
 .analysis-bars-stack {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .analysis-bar-item {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .analysis-bar-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .analysis-bar-title {
@@ -2388,11 +2396,10 @@ h1 {
 .analysis-bar-stat {
   color: var(--muted);
   font-size: 11px;
-  font-weight: 500;
 }
 
 .analysis-bar-rail {
-  height: 7px;
+  height: 6px;
   border-radius: 999px;
   background: var(--line);
   overflow: hidden;
@@ -2401,66 +2408,62 @@ h1 {
 .analysis-bar-indicator {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--p-teal), #8de2dc);
-  transform-origin: left;
-  transition: transform .6s cubic-bezier(.2,.8,.2,1), opacity .3s ease;
+  background: var(--p-teal);
+  transform-origin: left center;
+  transition: transform .5s cubic-bezier(.2,.8,.2,1);
 }
 
 .analysis-bar-item:nth-child(2n) .analysis-bar-indicator {
-  background: linear-gradient(90deg, var(--p-pink), #fcd4d7);
+  background: var(--p-pink);
 }
 
 .analysis-bar-item:nth-child(3n) .analysis-bar-indicator {
-  background: linear-gradient(90deg, var(--p-mauve), #c1a2cf);
+  background: var(--p-mauve);
 }
 
-.analysis-bar-item:nth-child(4n) .analysis-bar-indicator {
-  background: linear-gradient(90deg, var(--p-teal), var(--p-mauve));
-}
-
-/* ── DURATION BREAKDOWN LIST ── */
+/* ── Duration Breakdown List ── */
 .analysis-breakdown-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .analysis-breakdown-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 11px 14px;
   border-radius: 10px;
   background: var(--paper);
   border: 1px solid var(--line);
-  transition: transform var(--transition-fast), border-color var(--transition-fast);
+  transition: border-color var(--transition-fast);
 }
 
 .analysis-breakdown-card:hover {
-  transform: translateX(2px);
   border-color: var(--p-teal);
 }
 
 .analysis-breakdown-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .analysis-category-dot {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .analysis-breakdown-name {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--ink);
 }
 
 .analysis-breakdown-count {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--muted);
 }
 
@@ -2469,7 +2472,7 @@ h1 {
 }
 
 .analysis-breakdown-time {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 700;
   color: var(--ink);
 }
@@ -2479,17 +2482,22 @@ h1 {
   color: var(--muted);
 }
 
-/* ── HISTORY LOG TABLE (Nixtio Employee Roster Table) ── */
+/* ── Watched Content Log Table ── */
+.analysis-table-container {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
 .analysis-history-table {
   width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
+  border-collapse: collapse;
   font-size: 12.5px;
   text-align: left;
 }
 
 .analysis-history-table th {
-  padding: 12px 14px;
+  padding: 11px 14px;
   font-size: 11px;
   font-weight: 600;
   color: var(--muted);
@@ -2499,15 +2507,12 @@ h1 {
   background: var(--paper);
 }
 
-.analysis-history-table th:first-child { border-top-left-radius: 8px; }
-.analysis-history-table th:last-child { border-top-right-radius: 8px; }
-
 .analysis-history-table td {
-  padding: 12px 14px;
+  padding: 11px 14px;
   border-bottom: 1px solid var(--line);
   color: var(--ink);
   vertical-align: middle;
-  background: var(--white);
+  background: var(--surface);
   transition: background var(--transition-fast);
 }
 
@@ -2526,12 +2531,45 @@ h1 {
 }
 
 .analysis-history-thumb {
-  width: 28px;
-  height: 40px;
+  width: 26px;
+  height: 38px;
   border-radius: 4px;
   object-fit: cover;
   flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--line);
+}
+
+.analysis-history-title-link {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.analysis-history-title-link:hover {
+  color: var(--c-green-text);
+}
+
+.analysis-history-tags {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.analysis-history-cat,
+.analysis-history-year {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.analysis-history-rating {
+  font-weight: 600;
+  color: var(--c-green-text);
+  font-size: 12px;
+}
+
+.analysis-history-duration {
+  font-weight: 600;
+  color: var(--ink);
+  font-size: 12px;
 }
 
 .analysis-status-pill {
@@ -2544,12 +2582,12 @@ h1 {
 }
 
 .analysis-status-pill.completed {
-  background: rgba(98, 198, 191, 0.18);
+  background: rgba(98, 198, 191, 0.16);
   color: var(--c-green-text);
 }
 
 .analysis-status-pill.watching {
-  background: rgba(248, 182, 186, 0.28);
+  background: rgba(248, 182, 186, 0.24);
   color: #8c3b42;
 }
 
@@ -2557,13 +2595,48 @@ h1 {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 18px;
+  padding: 13px 18px;
   border-radius: 12px;
-  background: rgba(154, 114, 170, 0.1);
-  border: 1px solid rgba(154, 114, 170, 0.25);
+  background: rgba(98, 198, 191, 0.08);
+  border: 1px solid rgba(98, 198, 191, 0.25);
   font-size: 12.5px;
   color: var(--ink);
   margin-bottom: 22px;
+}
+
+.analysis-anime-note svg {
+  color: var(--c-green-text);
+  flex-shrink: 0;
+}
+
+.analysis-empty-state {
+  text-align: center;
+  padding: 56px 24px;
+}
+
+.analysis-empty-icon {
+  margin: 0 auto 16px;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: var(--hover-surface);
+  color: var(--c-green-text);
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+}
+
+.analysis-empty-state h2 {
+  font-size: 17px;
+  margin: 0 0 8px;
+}
+
+.analysis-empty-state p {
+  max-width: 440px;
+  margin: 0 auto;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
 }
 @media (max-width: 1000px) {
   .topbar { height: auto; min-height: 60px; grid-template-columns: auto minmax(0, 1fr); gap: 8px 16px; padding: 12px 20px 0; }

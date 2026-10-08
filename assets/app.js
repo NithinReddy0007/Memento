@@ -645,19 +645,21 @@ function analysisMarkup(history) {
     : (categories[analysisActiveCategory]?.label || 'Category');
 
   if (!entries.length) {
-    return `${navMarkup('analysis')}<main class="main">
+    return `${navMarkup('analysis')}<main class="main analysis-main-clean">
       ${breadcrumbComponent(scopeLabel)}
-      <div class="analysis-dashboard-header">
-        <div class="analysis-header-copy">
-          <h1>Watch History Analytics</h1>
-          <p>Dashboard insights strictly calculated from your personal viewing records.</p>
+      <div class="analysis-clean-header">
+        <div>
+          <h1 class="analysis-clean-title">Viewing Analytics</h1>
+          <p class="analysis-clean-subtitle">Personal viewing statistics calculated strictly from your watch history.</p>
         </div>
       </div>
-      <div class="analysis-panel" style="text-align: center; padding: 56px 24px;">
-        <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.5" style="margin: 0 auto 16px; color: var(--muted);"><path d="M3 3v18h18M9 9l3 3 4-4 3 3"/></svg>
-        <h2 style="font-size: 16px; margin: 0 0 6px;">No Watched Content in History</h2>
-        <p style="max-width: 440px; margin: 0 auto 20px; color: var(--muted); font-size: 13px;">Add films, series, anime, or documentaries to your Watch History to see viewing metrics, actor frequencies, and genre distributions.</p>
-        <div><a class="button-primary" href="${appHref('index.html')}">Discover Titles</a></div>
+      <div class="analysis-panel analysis-empty-state">
+        <div class="analysis-empty-icon">
+          <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M6 6h10M6 10h10M6 14h6"/></svg>
+        </div>
+        <h2>No Recorded Titles Yet</h2>
+        <p>Log films, series, anime, or documentaries in your Watch History to see viewing volumes, cast frequency podiums, and genre distributions.</p>
+        <div style="margin-top:20px;"><a class="button-primary" href="${appHref('index.html')}">Explore Catalog</a></div>
       </div>
     </main><footer class="footer">Your watch history stays in this browser.</footer>`;
   }
@@ -734,19 +736,19 @@ function analysisMarkup(history) {
     .sort((a, b) => b.count - a.count);
 
   const isAnimeScope = analysisActiveCategory === 'anime';
+  const completionPct = totalTitles > 0 ? Math.round((completedCount / totalTitles) * 100) : 0;
 
-  return `${navMarkup('analysis')}<main class="main">
-    <!-- Breadcrumb (shadcn component) -->
+  return `${navMarkup('analysis')}<main class="main analysis-main-clean">
     ${breadcrumbComponent(scopeLabel)}
 
-    <!-- Top Dashboard Header with Segmented Filter Control -->
-    <div class="analysis-dashboard-header">
-      <div class="analysis-header-copy">
-        <h1>Watch Analytics</h1>
-        <p>Live metrics compiled from ${totalTitles} verified titles in your watch history.</p>
+    <!-- Top Dashboard Header with Segmented Filter Control (AgroControl Style) -->
+    <div class="analysis-clean-header">
+      <div>
+        <h1 class="analysis-clean-title">Viewing Analytics</h1>
+        <p class="analysis-clean-subtitle">Precision insights from ${totalTitles} verified titles in your personal record.</p>
       </div>
 
-      <!-- Segmented Scope Selector (All | Movies | TV Shows | Anime | Documentaries) -->
+      <!-- Segmented Scope Selector Pill -->
       <nav class="analysis-segmented-tabs" aria-label="Analysis content scope">
         <button class="analysis-tab-btn ${analysisActiveCategory === 'all' ? 'is-active' : ''}" type="button" data-analysis-cat="all">
           <span>All</span>
@@ -762,17 +764,19 @@ function analysisMarkup(history) {
       </nav>
     </div>
 
-    <!-- PRIMARY KPI METRIC CARDS (Financial Dashboard Inspired) -->
+    <!-- PRIMARY METRIC CARDS (AgroControl Style: Clean, Grounded, Monoline SVGs) -->
     <section class="analysis-metrics-row" aria-label="Key viewing metrics">
       <!-- 1. Total Content -->
       <div class="analysis-metric-card">
         <div class="analysis-metric-top">
           <span class="analysis-metric-label">Total Watched</span>
-          <span class="analysis-metric-icon-wrap" aria-hidden="true">🎬</span>
+          <div class="analysis-metric-icon-wrap" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="m10 9 5 3-5 3V9z"/></svg>
+          </div>
         </div>
         <div class="analysis-metric-value">${totalTitles}</div>
         <div class="analysis-metric-sub">
-          <span class="analysis-metric-pill">${completedCount} done</span>
+          <span class="analysis-metric-pill">${completedCount} finished</span>
           <span>${inProgressCount} in progress</span>
         </div>
       </div>
@@ -780,36 +784,42 @@ function analysisMarkup(history) {
       <!-- 2. Viewing Duration -->
       <div class="analysis-metric-card">
         <div class="analysis-metric-top">
-          <span class="analysis-metric-label">Viewing Duration</span>
-          <span class="analysis-metric-icon-wrap" aria-hidden="true">⏱️</span>
+          <span class="analysis-metric-label">Logged Watch Time</span>
+          <div class="analysis-metric-icon-wrap" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          </div>
         </div>
         <div class="analysis-metric-value">${formatDurationHoursMinutes(totalMinutes)}</div>
         <div class="analysis-metric-sub">
-          <span>${Math.round(totalMinutes)} total minutes logged</span>
+          <span>${Math.round(totalMinutes).toLocaleString()} total minutes recorded</span>
         </div>
       </div>
 
-      <!-- 3. Top Genre -->
+      <!-- 3. Leading Genre -->
       <div class="analysis-metric-card">
         <div class="analysis-metric-top">
-          <span class="analysis-metric-label">Leading Genre</span>
-          <span class="analysis-metric-icon-wrap" aria-hidden="true">🏷️</span>
+          <span class="analysis-metric-label">Top Genre</span>
+          <div class="analysis-metric-icon-wrap" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+          </div>
         </div>
         <div class="analysis-metric-value" style="font-size:22px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHTML(topGenreName)}</div>
         <div class="analysis-metric-sub">
-          <span>${sortedGenres.length} distinct genres</span>
+          <span>${sortedGenres.length} categories represented</span>
         </div>
       </div>
 
-      <!-- 4. Average Title Duration -->
+      <!-- 4. Completion Rate -->
       <div class="analysis-metric-card">
         <div class="analysis-metric-top">
-          <span class="analysis-metric-label">Avg Runtime</span>
-          <span class="analysis-metric-icon-wrap" aria-hidden="true">📊</span>
+          <span class="analysis-metric-label">Completion Rate</span>
+          <div class="analysis-metric-icon-wrap" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
         </div>
-        <div class="analysis-metric-value">${totalTitles ? Math.round(totalMinutes / totalTitles) : 0}m</div>
+        <div class="analysis-metric-value">${completionPct}%</div>
         <div class="analysis-metric-sub">
-          <span>Per title in ${scopeLabel.toLowerCase()}</span>
+          <span>${totalTitles ? Math.round(totalMinutes / totalTitles) : 0}m avg per title</span>
         </div>
       </div>
     </section>
@@ -817,8 +827,8 @@ function analysisMarkup(history) {
     <!-- ANIME SPECIFIC NOTE -->
     ${isAnimeScope ? `
       <div class="analysis-anime-note">
-        <span aria-hidden="true">ℹ️</span>
-        <div><strong>Anime Scope:</strong> Actor and actress analysis is excluded for animated productions. Displaying animation formats, runtime volume, and genre composition.</div>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <div><strong>Anime Scope Notice:</strong> Cast frequency analysis is omitted for animated features per tracking standards. Displaying genre composition, duration volume, and catalog records.</div>
       </div>
     ` : ''}
 
@@ -829,10 +839,10 @@ function analysisMarkup(history) {
         <section class="analysis-panel" aria-labelledby="actors-heading">
           <div class="analysis-panel-header">
             <div class="analysis-panel-title">
-              <span aria-hidden="true">👤</span>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               <h2 id="actors-heading">Most Watched Actors</h2>
             </div>
-            <span class="analysis-panel-meta">Based on actual cast appearances</span>
+            <span class="analysis-panel-meta">Verified cast appearances</span>
           </div>
           ${renderDashboardPeopleList(topActors, 'Actors', 'actors')}
         </section>
@@ -841,10 +851,10 @@ function analysisMarkup(history) {
         <section class="analysis-panel" aria-labelledby="actresses-heading">
           <div class="analysis-panel-header">
             <div class="analysis-panel-title">
-              <span aria-hidden="true">👩</span>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
               <h2 id="actresses-heading">Most Watched Actresses</h2>
             </div>
-            <span class="analysis-panel-meta">Based on actual cast appearances</span>
+            <span class="analysis-panel-meta">Verified cast appearances</span>
           </div>
           ${renderDashboardPeopleList(topActresses, 'Actresses', 'actresses')}
         </section>
@@ -854,20 +864,20 @@ function analysisMarkup(history) {
       <section class="analysis-panel" aria-labelledby="genres-heading">
         <div class="analysis-panel-header">
           <div class="analysis-panel-title">
-            <span aria-hidden="true">📈</span>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
             <h2 id="genres-heading">Genre Distribution</h2>
           </div>
-          <span class="analysis-panel-meta">${sortedGenres.length} categories</span>
+          <span class="analysis-panel-meta">${sortedGenres.length} tags detected</span>
         </div>
         ${renderDashboardGenreBars(sortedGenres)}
       </section>
 
-      <!-- Category Breakdown or Format Details Panel -->
+      <!-- Category Duration or Volume Breakdown Panel -->
       <section class="analysis-panel" aria-labelledby="breakdown-heading">
         <div class="analysis-panel-header">
           <div class="analysis-panel-title">
-            <span aria-hidden="true">⏳</span>
-            <h2 id="breakdown-heading">${analysisActiveCategory === 'all' ? 'Duration by Category' : 'Viewing Scale'}</h2>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>
+            <h2 id="breakdown-heading">${analysisActiveCategory === 'all' ? 'Time Share by Category' : 'Category Volume'}</h2>
           </div>
           <span class="analysis-panel-meta">${formatDurationHoursMinutes(totalMinutes)} total</span>
         </div>
@@ -881,7 +891,7 @@ function analysisMarkup(history) {
                   <span class="analysis-category-dot" style="background:${categories[catKey].color}"></span>
                   <div>
                     <div class="analysis-breakdown-name">${categories[catKey].label}</div>
-                    <div class="analysis-breakdown-count">${count} ${count === 1 ? 'title' : 'titles'}</div>
+                    <div class="analysis-breakdown-count">${count} ${count === 1 ? 'title' : 'titles'} logged</div>
                   </div>
                 </div>
                 <div class="analysis-breakdown-right">
@@ -895,35 +905,35 @@ function analysisMarkup(history) {
           <div class="analysis-breakdown-list">
             <div class="analysis-breakdown-card">
               <div class="analysis-breakdown-name">Active Scope</div>
-              <div class="analysis-breakdown-time" style="color:var(--amber)">${scopeLabel}</div>
+              <div class="analysis-breakdown-time" style="color:var(--p-teal)">${scopeLabel}</div>
             </div>
             <div class="analysis-breakdown-card">
               <div class="analysis-breakdown-name">Titles in Category</div>
               <div class="analysis-breakdown-time">${totalTitles} titles</div>
             </div>
             <div class="analysis-breakdown-card">
-              <div class="analysis-breakdown-name">Total Category Watch Time</div>
+              <div class="analysis-breakdown-name">Total Watch Time</div>
               <div class="analysis-breakdown-time">${formatDurationHoursMinutes(totalMinutes)}</div>
             </div>
             <div class="analysis-breakdown-card">
               <div class="analysis-breakdown-name">Completion Rate</div>
-              <div class="analysis-breakdown-time">${totalTitles ? Math.round((completedCount / totalTitles) * 100) : 0}%</div>
+              <div class="analysis-breakdown-time">${completionPct}%</div>
             </div>
           </div>
         `}
       </section>
     </div>
 
-    <!-- DATA-DENSE LOG TABLE: Titles in Selected Scope -->
+    <!-- CLEAN DATA TABLE: Titles in Selected Scope -->
     <section class="analysis-panel" aria-labelledby="history-log-heading">
       <div class="analysis-panel-header">
         <div class="analysis-panel-title">
-          <span aria-hidden="true">📋</span>
-          <h2 id="history-log-heading">Watched Content Records (${totalTitles})</h2>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          <h2 id="history-log-heading">Watched Content Log (${totalTitles})</h2>
         </div>
-        <span class="analysis-panel-meta">Raw entries used in analysis calculations</span>
+        <span class="analysis-panel-meta">Raw records analyzed above</span>
       </div>
-      <div style="overflow-x:auto">
+      <div class="analysis-table-container">
         <table class="analysis-history-table">
           <thead>
             <tr>
@@ -947,15 +957,15 @@ function analysisMarkup(history) {
                   <div class="analysis-history-title-cell">
                     ${item.image ? `<img class="analysis-history-thumb" src="${escapeHTML(item.image)}" alt="" loading="lazy">` : ''}
                     <div>
-                      <a href="${detailsHref}" style="color:var(--ink);font-weight:600;text-decoration:none">${escapeHTML(item.title)}</a>
-                      <div style="font-size:10.5px;color:var(--muted)">${(item.tags || []).slice(0, 2).join(' · ')}</div>
+                      <a class="analysis-history-title-link" href="${detailsHref}">${escapeHTML(item.title)}</a>
+                      <div class="analysis-history-tags">${(item.tags || []).slice(0, 2).join(' · ')}</div>
                     </div>
                   </div>
                 </td>
-                <td><span style="color:var(--muted)">${categories[e.category]?.label || e.category}</span></td>
-                <td>${escapeHTML(item.year || '—')}</td>
-                <td>${rating ? `★ ${Number(rating).toFixed(1)}` : '—'}</td>
-                <td><strong>${formatDurationHoursMinutes(mins)}</strong></td>
+                <td><span class="analysis-history-cat">${categories[e.category]?.label || e.category}</span></td>
+                <td><span class="analysis-history-year">${escapeHTML(item.year || '—')}</span></td>
+                <td><span class="analysis-history-rating">${rating ? `★ ${Number(rating).toFixed(1)}` : '—'}</span></td>
+                <td><span class="analysis-history-duration">${formatDurationHoursMinutes(mins)}</span></td>
                 <td><span class="analysis-status-pill ${e.status}">${e.status || 'watching'}</span></td>
               </tr>`;
             }).join('')}
@@ -968,13 +978,13 @@ function analysisMarkup(history) {
 
 function renderDashboardPeopleList(people, label, listId) {
   if (!people.length) {
-    return `<div style="padding:24px;text-align:center;color:var(--muted);font-size:12.5px">No ${label.toLowerCase()} found in this viewing selection.</div>`;
+    return `<div class="analysis-empty-people">No ${label.toLowerCase()} recorded in this viewing selection.</div>`;
   }
   const INITIAL_COUNT = 8;
   const maxCount = people[0]?.count || 1;
 
   // Podium for top 3 (if at least 1 person exists)
-  // Podium visual order: 2nd (left), 1st (center, tallest), 3rd (right)
+  // Podium visual order: 2nd (left), 1st (center, elevated), 3rd (right)
   const top1 = people[0] || null;
   const top2 = people[1] || null;
   const top3 = people[2] || null;
@@ -983,20 +993,20 @@ function renderDashboardPeopleList(people, label, listId) {
     if (!person) return `<div class="analysis-podium-step ${stepClass} is-empty"></div>`;
     return `
       <div class="analysis-podium-step ${stepClass}">
-        <div class="analysis-podium-avatar-wrap">
-          <div class="analysis-podium-crown">#${rank}</div>
+        <div class="analysis-podium-card">
+          <div class="analysis-podium-badge">#${rank}</div>
           <div class="analysis-podium-avatar">
             ${person.image
               ? `<img src="${escapeHTML(person.image)}" alt="${escapeHTML(person.name)}" loading="lazy">`
               : `<div class="analysis-podium-initials">${escapeHTML(castInitials(person.name))}</div>`}
           </div>
+          <div class="analysis-podium-info">
+            <span class="analysis-podium-name" title="${escapeHTML(person.name)}">${escapeHTML(person.name)}</span>
+            <span class="analysis-podium-score">${person.count} <span class="analysis-podium-unit">${person.count === 1 ? 'title' : 'titles'}</span></span>
+          </div>
         </div>
-        <div class="analysis-podium-info">
-          <span class="analysis-podium-name" title="${escapeHTML(person.name)}">${escapeHTML(person.name)}</span>
-          <span class="analysis-podium-score">${person.count} <small>${person.count === 1 ? 'title' : 'titles'}</small></span>
-        </div>
-        <div class="analysis-podium-pillar">
-          <span class="analysis-podium-rank-tag">RANK ${rank}</span>
+        <div class="analysis-podium-pedestal">
+          <span class="analysis-pedestal-num">${rank}</span>
         </div>
       </div>
     `;
@@ -1051,7 +1061,7 @@ function renderDashboardPeopleList(people, label, listId) {
   return `<div class="analysis-people-container" id="lb-${listId}">
     ${podiumMarkup}
     <div class="analysis-lb-list">
-      <div class="analysis-lb-section-sub">Runner-ups & Notable Appearances</div>
+      <div class="analysis-lb-section-sub">Further Notable Cast Members</div>
       ${rows}
     </div>
     ${showMoreBtn}

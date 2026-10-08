@@ -10,7 +10,7 @@ services:
       - key: NODE_VERSION
         value: 22
       - key: CORS_ORIGINS
-        value: https://nithinreddy0007.github.io
+        value: https://nithinreddy0007.github.io,https://memento-nine-phi.vercel.app
       - key: TMDB_READ_ACCESS_TOKEN
         sync: false
       - key: OMDB_API_KEY
