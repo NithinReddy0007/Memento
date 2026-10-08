@@ -1,10 +1,10 @@
 const categories = {
-  movies: { label: 'Movies', singular: 'movie', page: 'pages/movies/index.html', color: '#da525d', wash: '#efc3c1', description: 'Feature films, remembered and found again.' },
+  movies: { label: 'Movies', singular: 'movie', page: 'pages/movies/index.html', color: '#62c6bf', wash: '#e4f6f4', description: 'Feature films, remembered and found again.' },
   'tv-shows': {
-    label: 'TV Shows', singular: 'TV show', page: 'pages/tv-shows/index.html', color: '#96d1aa', wash: '#dbe9d8', description: 'Series worth staying with, episode by episode.'
+    label: 'TV Shows', singular: 'TV show', page: 'pages/tv-shows/index.html', color: '#f8b6ba', wash: '#fdf0f1', description: 'Series worth staying with, episode by episode.'
   },
-  anime: { label: 'Anime', singular: 'anime', page: 'pages/anime/index.html', color: '#b984af', wash: '#e5d2da', description: 'Animated worlds, from quiet moments to big adventures.' },
-  documentaries: { label: 'Documentaries', singular: 'documentary', page: 'pages/documentaries/index.html', color: '#c59f6b', wash: '#e9dac5', description: 'True stories and real worlds, carefully collected.' }
+  anime: { label: 'Anime', singular: 'anime', page: 'pages/anime/index.html', color: '#9a72aa', wash: '#f2eaf5', description: 'Animated worlds, from quiet moments to big adventures.' },
+  documentaries: { label: 'Documentaries', singular: 'documentary', page: 'pages/documentaries/index.html', color: '#4fa8a2', wash: '#e1f4f2', description: 'True stories and real worlds, carefully collected.' }
 };
 
 const storageKey = 'memento.watchHistory.v1';
@@ -1790,6 +1790,39 @@ function render() {
   }
 }
 
-// Show cinematic loader on first paint, then render
+/* ── SCROLL NAVBAR AUTO-HIDE ── */
+let lastScrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
+let scrollTicking = false;
+
+function initScrollNavbar() {
+  window.addEventListener('scroll', () => {
+    if (!scrollTicking) {
+      window.requestAnimationFrame(() => {
+        const currentScrollY = window.pageYOffset || document.documentElement.scrollTop || 0;
+        const topbar = document.querySelector('.topbar');
+        if (topbar) {
+          if (currentScrollY > 70) {
+            topbar.classList.add('nav-scrolled');
+            // If scrolling down, hide navbar. If scrolling up, reveal it.
+            if (currentScrollY > lastScrollY && currentScrollY > 120) {
+              topbar.classList.add('nav-hidden');
+            } else if (currentScrollY < lastScrollY) {
+              topbar.classList.remove('nav-hidden');
+            }
+          } else {
+            topbar.classList.remove('nav-scrolled');
+            topbar.classList.remove('nav-hidden');
+          }
+        }
+        lastScrollY = Math.max(0, currentScrollY);
+        scrollTicking = false;
+      });
+      scrollTicking = true;
+    }
+  }, { passive: true });
+}
+
+// Show cinematic loader on first paint, then render & init navbar
 injectPageLoader();
+initScrollNavbar();
 render();
