@@ -820,6 +820,7 @@ async function serveStatic(request, response, url) {
   let pathname;
   try {
     pathname = decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname);
+    if (pathname.endsWith('/')) pathname += 'index.html';
   } catch {
     response.writeHead(400).end('Bad request');
     return;

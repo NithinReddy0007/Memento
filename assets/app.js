@@ -1,15 +1,85 @@
 const categories = {
-  movies: { label: 'Movies', singular: 'movie', page: 'pages/movies/index.html', color: '#62c6bf', wash: '#e4f6f4', description: 'Feature films, remembered and found again.' },
+  movies: { label: 'Movies', singular: 'movie', page: 'pages/movies/index.html', color: '#da525d', wash: '#fdf2f3', description: 'Feature films, remembered and found again.' },
   'tv-shows': {
-    label: 'TV Shows', singular: 'TV show', page: 'pages/tv-shows/index.html', color: '#f8b6ba', wash: '#fdf0f1', description: 'Series worth staying with, episode by episode.'
+    label: 'TV Shows', singular: 'TV show', page: 'pages/tv-shows/index.html', color: '#c59f6b', wash: '#faf5ee', description: 'Series worth staying with, episode by episode.'
   },
-  anime: { label: 'Anime', singular: 'anime', page: 'pages/anime/index.html', color: '#9a72aa', wash: '#f2eaf5', description: 'Animated worlds, from quiet moments to big adventures.' },
-  documentaries: { label: 'Documentaries', singular: 'documentary', page: 'pages/documentaries/index.html', color: '#4fa8a2', wash: '#e1f4f2', description: 'True stories and real worlds, carefully collected.' }
+  anime: { label: 'Anime', singular: 'anime', page: 'pages/anime/index.html', color: '#96d1aa', wash: '#f2faf5', description: 'Animated worlds, from quiet moments to big adventures.' },
+  documentaries: { label: 'Documentaries', singular: 'documentary', page: 'pages/documentaries/index.html', color: '#b984af', wash: '#f7f1f6', description: 'True stories and real worlds, carefully collected.' }
 };
 
 const storageKey = 'memento.watchHistory.v1';
 const somedayStorageKey = 'memento.someday.v1';
 const themeStorageKey = 'memento.theme.v1';
+const customPostersKey = 'memento.customPosters.v1';
+
+/* ── CUSTOM POSTERS STORE ── */
+function readCustomPosters() {
+  try {
+    return JSON.parse(localStorage.getItem(customPostersKey) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function writeCustomPosters(posters) {
+  try {
+    localStorage.setItem(customPostersKey, JSON.stringify(posters));
+  } catch (err) {
+    console.error('Failed to save custom poster to localStorage:', err);
+  }
+}
+
+function getCustomPoster(categoryKey, id) {
+  if (!id) return null;
+  const posters = readCustomPosters();
+  const entry = posters[`${categoryKey}:${id}`] || posters[String(id)];
+  return entry ? (typeof entry === 'object' ? entry.dataUrl : entry) : null;
+}
+
+function setCustomPoster(categoryKey, id, dataUrl, item = {}) {
+  if (!id || !dataUrl) return;
+  const posters = readCustomPosters();
+  posters[`${categoryKey}:${id}`] = {
+    dataUrl,
+    title: item.title || '',
+    category: categoryKey,
+    id,
+    updatedAt: Date.now()
+  };
+  writeCustomPosters(posters);
+}
+
+function removeCustomPoster(categoryKey, id) {
+  if (!id) return;
+  const posters = readCustomPosters();
+  delete posters[`${categoryKey}:${id}`];
+  delete posters[String(id)];
+  writeCustomPosters(posters);
+}
+
+/* ── THINKING ORB LOADER HELPER ── */
+function showThinkingOrb(container, text = 'Loading...', size = 64) {
+  if (!container) return;
+  const currentTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+  if (window.MementoFx && typeof window.MementoFx.mountThinkingOrb === 'function') {
+    window.MementoFx.mountThinkingOrb(container, {
+      size,
+      state: 'listening',
+      text,
+      theme: currentTheme
+    });
+  } else {
+    container.innerHTML = `<div class="memento-loading-container" role="status"><p style="color:var(--muted);font-size:13px;font-family:var(--sans)">${escapeHTML(text)}</p></div>`;
+  }
+}
+
+function hideThinkingOrb(container) {
+  if (!container) return;
+  if (window.MementoFx && typeof window.MementoFx.unmount === 'function') {
+    window.MementoFx.unmount(container);
+  }
+}
+
 const searchResultCache = new Map();
 const apiMemoryCache = new Map();
 let searchDebounce;
@@ -207,7 +277,10 @@ function navMarkup(activePage) {
 }
 
 function imageMarkup(item, categoryKey) {
-  return `<img src="${item.image || fallbackImages[categoryKey]}" data-fallback="${fallbackImages[categoryKey]}" alt="${escapeHTML(item.title)}" loading="lazy" onerror="this.onerror=null;this.src=this.dataset.fallback">`;
+  const customPoster = getCustomPoster(categoryKey, item?.id);
+  const src = customPoster || item?.image || fallbackImages[categoryKey];
+  const badge = customPoster ? '<span class="poster-custom-badge" aria-label="Custom poster assigned">Custom</span>' : '';
+  return `${badge}<img src="${src}" data-fallback="${fallbackImages[categoryKey]}" alt="${escapeHTML(item?.title || '')}" loading="lazy" onerror="this.onerror=null;this.src=this.dataset.fallback">`;
 }
 
 /* ── STATE FOR TRENDING HERO ── */
@@ -216,33 +289,6 @@ let trendingActiveIndex = 0;
 let trendingHeroTimer = null;
 let trendingMuted = true;
 
-/* ── CINEMATIC CARD (NO HOVER TEASER AS REQUESTED) ── */
-function cinematicCard(item, index) {
-  const key = historyKey(item.category, item);
-  const detailsHref = contentDetailsHref(item.category, item);
-  const rating = Number.isFinite(item.imdbRating) ? item.imdbRating : (Number.isFinite(item.voteAverage) ? item.voteAverage : null);
-  searchResultCache.set(key, item);
-  return `<article class="cinema-card" style="--card-index:${index}" data-cinema-key="${escapeHTML(key)}" data-cinema-category="${escapeHTML(item.category)}" data-cinema-media="${escapeHTML(item.mediaType)}" data-cinema-id="${escapeHTML(item.id)}">
-    <a class="cinema-card-link" href="${detailsHref}" aria-label="View ${escapeHTML(item.title)} details">
-      <div class="cinema-art">
-        ${item.image ? `<img src="${escapeHTML(item.image)}" alt="" loading="lazy">` : ''}
-        <span class="cinema-vignette" aria-hidden="true"></span>
-        <span class="cinema-rank">${String(index + 1).padStart(2, '0')}</span>
-      </div>
-      <div class="cinema-card-copy">
-        <div class="cinema-meta"><span>${escapeHTML(item.year)}</span><span>${rating ? `IMDb ${Number(rating).toFixed(1)}` : 'IMDb —'}</span></div>
-        <h3>${escapeHTML(item.title)}</h3>
-        <p>${escapeHTML(item.category === 'tv-shows' ? 'Series' : item.category === 'anime' ? 'Anime' : item.category === 'documentaries' ? 'Documentary' : 'Movie')}</p>
-      </div>
-    </a>
-    <div class="cinema-card-actions">
-      <button class="poster-action-button" type="button" data-cinema-history="${escapeHTML(key)}" aria-label="Add ${escapeHTML(item.title)} to Watch History">+</button>
-      <button class="poster-action-button poster-heart" type="button" data-cinema-someday="${escapeHTML(key)}" aria-label="Save ${escapeHTML(item.title)} for Someday">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"></path></svg>
-      </button>
-    </div>
-  </article>`;
-}
 
 /* ── NETFLIX-STYLE IMMERSIVE TRENDING HERO ── */
 function netflixHeroMarkup(item, index = 0, total = 1) {
@@ -303,26 +349,7 @@ function netflixHeroMarkup(item, index = 0, total = 1) {
   </section>`;
 }
 
-/* ── CINEMATIC POPULAR & TRENDING FEED SHELL ── */
-function cinematicFeedMarkup() {
-  const skeletons = Array(6).fill('<div class="cinema-loading cinema-card-skeleton"></div>').join('');
-  return `<section class="cinematic-section" aria-labelledby="cinematic-heading">
-    <div class="cinematic-heading">
-      <div>
-        <p class="eyebrow">The Memento Cinema</p>
-        <h2 id="cinematic-heading">Trending & Top Rated</h2>
-        <p>Curated movies and series with live IMDb ratings.</p>
-      </div>
-      <span class="cinematic-live"><i></i> Verified IMDb Ratings</span>
-    </div>
-    <div class="cinema-rail-heading">
-      <strong>Explore Titles</strong>
-      <span>Click any title to explore details & trailer</span>
-    </div>
-    <div class="cinema-rail" data-cinema-feed aria-live="polite">${skeletons}</div>
-    <button class="cinema-more" type="button" data-cinema-more hidden>Load more titles</button>
-  </section>`;
-}
+/* ── THE MEMENTO CINEMA / TRENDING SECTION REMOVED ── */
 
 /* ── LOAD HERO & CINEMATIC FEED ── */
 async function loadTrendingHero() {
@@ -432,33 +459,6 @@ function wireHeroControls() {
   });
 }
 
-/* ── LOAD CINEMATIC FEED ── */
-async function loadCinematicFeed(page = 1) {
-  const rail = document.querySelector('[data-cinema-feed]');
-  const more = document.querySelector('[data-cinema-more]');
-  if (!rail) return;
-  if (page === 1) {
-    rail.innerHTML = Array(6).fill('<div class="cinema-loading cinema-card-skeleton"></div>').join('');
-  }
-  try {
-    const result = await backendRequest(`/api/cinematic-feed?page=${page}`);
-    if (page === 1) {
-      rail.innerHTML = result.items.map((item, index) => cinematicCard(item, index)).join('');
-    } else {
-      const offset = rail.querySelectorAll('.cinema-card').length;
-      rail.insertAdjacentHTML('beforeend', result.items.map((item, index) => cinematicCard(item, offset + index)).join(''));
-    }
-    if (more) {
-      more.hidden = !result.hasNextPage;
-      more.dataset.page = String(result.page + 1);
-    }
-  } catch (error) {
-    if (page === 1) {
-      rail.innerHTML = `<div class="cinema-error" style="grid-column:1/-1;"><strong>The cinema is taking a moment.</strong><span>${escapeHTML(error.message)}</span><button class="button-refresh" type="button" data-cinema-retry>Try again</button></div>`;
-    }
-  }
-}
-
 /* ── RECOMMENDATION SECTION ── */
 function recommendationSection(categoryKey) {
   const category = categories[categoryKey];
@@ -481,7 +481,6 @@ function homeMarkup() {
     <div data-netflix-hero-container>
       ${netflixHeroMarkup(null)}
     </div>
-    ${cinematicFeedMarkup()}
     ${Object.keys(categories).map(recommendationSection).join('')}
   </main><footer class="footer">Your watch history stays in this browser.</footer>
   <dialog class="trailer-dialog" data-trailer-dialog aria-labelledby="trailer-dialog-title">
@@ -1225,12 +1224,13 @@ async function openRecommendationTrailer(item) {
   if (!dialog || !title || !content || typeof dialog.showModal !== 'function') return;
 
   title.textContent = `${item.title} · Trailer`;
-  content.innerHTML = '<p class="trailer-dialog-status" role="status">Finding an official trailer...</p>';
   dialog.showModal();
+  showThinkingOrb(content, 'Finding an official trailer...', 48);
 
   try {
     const query = new URLSearchParams({ category: item.category, mediaType: item.mediaType, id: item.id });
     const result = await backendRequest(`/api/trailer?${query.toString()}`);
+    hideThinkingOrb(content);
     const trailer = result.trailer;
     if (!result.available || !trailer?.embedUrl) {
       content.innerHTML = '<p class="trailer-dialog-status" role="status">A playable trailer is currently unavailable for this title.</p>';
@@ -1242,6 +1242,7 @@ async function openRecommendationTrailer(item) {
     }
     content.innerHTML = `<div class="trailer-player"><iframe src="${escapeHTML(embedUrl.href)}" title="${escapeHTML(item.title)} trailer" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div><p class="trailer-caption">${escapeHTML(trailer.name || 'Trailer')}${trailer.official ? ' · Official' : ''}</p>`;
   } catch (error) {
+    hideThinkingOrb(content);
     content.innerHTML = `<p class="trailer-dialog-status" role="alert">${escapeHTML(error.message)}</p>`;
   }
 }
@@ -1362,8 +1363,11 @@ function detailsContentMarkup(detail) {
   ].filter(([, value]) => value);
   const ratingVal = Number.isFinite(detail.imdbRating) ? detail.imdbRating : (Number.isFinite(detail.tmdbRating) ? detail.tmdbRating : null);
   const imdbValue = ratingVal ? `${ratingVal.toFixed(1)} / 10` : 'Unavailable';
+  const customPoster = getCustomPoster(detail.category, detail.id);
+  const posterSrc = customPoster || detail.poster;
+  const customBadge = customPoster ? '<span class="poster-custom-badge" aria-label="Custom poster assigned">Custom</span>' : '';
   return `<article class="content-detail">
-    <div class="detail-poster">${detail.poster ? `<img src="${escapeHTML(detail.poster)}" alt="${escapeHTML(detail.title)} poster">` : `<div class="detail-no-poster">Artwork unavailable</div>`}</div>
+    <div class="detail-poster">${posterSrc ? `<div style="position:relative">${customBadge}<img src="${escapeHTML(posterSrc)}" alt="${escapeHTML(detail.title)} poster"></div>` : `<div class="detail-no-poster">Artwork unavailable</div>`}</div>
     <div class="detail-copy">
       <p class="eyebrow">${escapeHTML(categoryLabel)} · ${escapeHTML(detail.year || 'Release year unavailable')}</p>
       <h1>${escapeHTML(detail.title)}</h1>
@@ -1395,6 +1399,7 @@ function trailerMarkup(detail) {
 async function loadContentDetails() {
   const container = document.querySelector('[data-content-details]');
   if (!container) return;
+  showThinkingOrb(container, 'Loading title details...', 64);
   const params = new URLSearchParams(window.location.search);
   const query = new URLSearchParams({
     category: params.get('category') || '',
@@ -1418,6 +1423,7 @@ async function loadContentDetails() {
       details.extendedSynopsis = omdbResponse.metadata.extendedPlot;
     }
     if (trailerResponse?.available) details.trailer = trailerResponse.trailer;
+    hideThinkingOrb(container);
     container.innerHTML = detailsContentMarkup(details);
     wireCastSection(container);
     document.title = `${details.title} | Memento`;
@@ -1429,6 +1435,7 @@ async function loadContentDetails() {
       });
     }
   } catch (error) {
+    hideThinkingOrb(container);
     container.innerHTML = `<div class="empty-state"><h1>Details unavailable</h1><p>${escapeHTML(error.message)}</p><a class="button-dark" href="${appHref('index.html')}">Back to Home</a></div>`;
   }
 }
@@ -1553,7 +1560,13 @@ function categoryMarkup(categoryKey, history) {
   return `${navMarkup(categoryKey)}<main class="main" style="--category-color:${category.color};--category-wash:${category.wash}">
     <section class="category-hero"><div><p class="eyebrow">Memento · ${category.label}</p><h1>${category.label}</h1><p>${category.description}</p><a class="button-dark hero-import-link" href="#import-watched">Import watched list (.txt)</a></div><span class="category-number" aria-hidden="true">0${Object.keys(categories).indexOf(categoryKey) + 1}</span></section>
     <section class="section add-title-section"><div class="section-heading"><div><p class="eyebrow">Find something to track</p><h2>Search ${category.label.toLowerCase()}</h2></div></div>
-      <form class="title-search" data-title-search="${categoryKey}"><label for="search-${categoryKey}">Title</label><input id="search-${categoryKey}" name="query" type="search" placeholder="Start typing a title..." autocomplete="off" minlength="2"><p class="search-status" data-search-status="${categoryKey}" aria-live="polite">Search the live catalog by title.</p><div class="search-results" data-search-results="${categoryKey}"></div></form>
+      <form class="title-search" data-title-search="${categoryKey}">
+        <label for="search-${categoryKey}">Title</label>
+        <div class="metal-search-slot" data-metal-slot="${categoryKey}"></div>
+        <input id="search-${categoryKey}" name="query" type="search" placeholder="Start typing a title..." autocomplete="off" minlength="2" class="standard-search-input">
+        <p class="search-status" data-search-status="${categoryKey}" aria-live="polite">Search the live catalog by title.</p>
+        <div class="search-results" data-search-results="${categoryKey}"></div>
+      </form>
     </section>
     ${importSectionMarkup(categoryKey, category)}
     <section class="section"><div class="section-heading"><div><p class="eyebrow">Your list</p><h2>${entries.length ? 'In your watch history' : 'Start your watch history'}</h2></div><span class="category-label">${entries.length} tracked</span></div>
@@ -1587,14 +1600,17 @@ async function updateRecommendationSection(categoryKey, page) {
   status.hidden = true;
   status.textContent = '';
   results.innerHTML = '';
+  showThinkingOrb(results, `Discovering ${categories[categoryKey]?.label || 'recommendations'}...`, 56);
   try {
     const result = await loadRecommendations(categoryKey, readHistory(), page);
+    hideThinkingOrb(results);
     if (!result.items.length) throw new Error('No matching titles were returned. Refresh to try another page.');
     results.innerHTML = result.items.map((item) => recommendationCard(categoryKey, item)).join('');
     results.querySelectorAll('[data-add-history]').forEach((button) => button.addEventListener('click', () => addRecommendationToCollection(button, categoryKey, 'history')));
     results.querySelectorAll('[data-add-someday]').forEach((button) => button.addEventListener('click', () => addRecommendationToCollection(button, categoryKey, 'someday')));
     loadVisibleRecommendationRatings(results);
   } catch (error) {
+    hideThinkingOrb(results);
     status.textContent = error.message;
     status.hidden = false;
   }
@@ -1607,15 +1623,18 @@ function runSearch(form, query) {
   const results = form.querySelector(`[data-search-results="${categoryKey}"]`);
   if (query.trim().length < 2) {
     status.textContent = 'Enter at least two characters to search.';
+    hideThinkingOrb(results);
     results.innerHTML = '';
     return;
   }
   status.textContent = 'Searching the live catalog...';
   results.innerHTML = '';
+  showThinkingOrb(results, 'Searching titles...', 56);
   const requestId = String(Number(form.dataset.requestId || 0) + 1);
   form.dataset.requestId = requestId;
   searchCategory(categoryKey, query.trim()).then((items) => {
     if (form.dataset.requestId !== requestId) return;
+    hideThinkingOrb(results);
     status.textContent = items.length ? `${items.length} matching titles` : 'No matching titles found.';
     results.innerHTML = items.map((item) => searchResultMarkup(categoryKey, item, readHistory())).join('');
     results.querySelectorAll('[data-add-result]').forEach((button) => button.addEventListener('click', () => {
@@ -1629,6 +1648,7 @@ function runSearch(form, query) {
     }));
   }).catch((error) => {
     if (form.dataset.requestId !== requestId) return;
+    hideThinkingOrb(results);
     status.textContent = error.message;
   });
 }
@@ -1660,6 +1680,512 @@ function injectPageLoader() {
 }
 
 /* ══════════════════════════════════════
+   APP MODALS & DIALOGS (CUSTOM POSTER & ADD CONTENT)
+   ══════════════════════════════════════ */
+let posterDialogTargetItem = null;
+let posterDialogTargetCategory = 'movies';
+let posterDialogDataUrl = null;
+let posterDialogSearchDebounce = null;
+
+let addContentCategory = 'movies';
+let addContentSearchDebounce = null;
+
+function injectAppModals() {
+  if (document.getElementById('memento-poster-dialog')) return;
+
+  // 1. Custom Poster Import Modal
+  const posterDialog = document.createElement('dialog');
+  posterDialog.id = 'memento-poster-dialog';
+  posterDialog.className = 'memento-modal poster-import-dialog';
+  posterDialog.setAttribute('aria-labelledby', 'poster-dialog-title');
+  posterDialog.innerHTML = `
+    <div class="memento-modal-header">
+      <div class="memento-modal-title-wrap">
+        <span class="memento-modal-icon">🖼️</span>
+        <div>
+          <h2 id="poster-dialog-title" class="memento-modal-title">Import Custom Poster</h2>
+          <p class="memento-modal-subtitle">Upload custom artwork for any title in your library or catalog.</p>
+        </div>
+      </div>
+      <button class="memento-modal-close" type="button" data-close-poster-dialog aria-label="Close dialog">✕</button>
+    </div>
+
+    <form class="poster-import-form" id="poster-import-form">
+      <div class="poster-dropzone" id="poster-dropzone" tabindex="0" role="button" aria-label="Select custom poster image">
+        <input type="file" id="poster-file-input" accept="image/png,image/jpeg,image/webp" style="display:none">
+        <div class="poster-dropzone-content" id="poster-dropzone-empty">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+          <p class="poster-dropzone-title"><strong>Choose an image</strong> or drag and drop here</p>
+          <p class="poster-dropzone-hint">PNG, JPEG, WebP · Up to 10MB</p>
+        </div>
+        <div class="poster-dropzone-preview" id="poster-preview-wrap" style="display:none">
+          <img id="poster-preview-img" alt="Selected poster preview" class="poster-preview-img">
+          <div class="poster-preview-meta">
+            <span id="poster-preview-filename" class="poster-preview-name"></span>
+            <span id="poster-preview-size" class="poster-preview-size"></span>
+            <button type="button" class="poster-change-btn" id="poster-change-file-btn">Choose different file</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="poster-form-alert" id="poster-form-alert" role="alert" style="display:none"></div>
+
+      <div class="poster-target-group">
+        <label for="poster-category-select" class="poster-label">Category</label>
+        <select id="poster-category-select" class="poster-select">
+          <option value="movies">Movies</option>
+          <option value="tv-shows">TV Shows</option>
+          <option value="anime">Anime</option>
+          <option value="documentaries">Documentaries</option>
+        </select>
+      </div>
+
+      <div class="poster-target-group">
+        <label for="poster-title-search" class="poster-label">Search catalog or choose tracked title</label>
+        <input type="search" id="poster-title-search" class="poster-input" placeholder="Start typing to search titles..." autocomplete="off">
+        <div id="poster-search-results" class="poster-candidate-list" style="display:none"></div>
+
+        <div style="margin-top:8px;">
+          <label for="poster-tracked-select" class="poster-sublabel">Or select from your watch list:</label>
+          <select id="poster-tracked-select" class="poster-select">
+            <option value="">-- Choose from your collection --</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="poster-selected-title-badge" id="poster-selected-title-badge" style="display:none">
+        <span class="poster-badge-indicator">Target:</span>
+        <strong id="poster-selected-name">None</strong>
+        <span id="poster-selected-details" class="poster-selected-details"></span>
+        <button type="button" id="poster-clear-selected-btn" class="memento-modal-close" style="width:24px;height:24px;margin-left:auto;font-size:11px;" title="Clear selected title">✕</button>
+      </div>
+
+      <div class="memento-modal-actions">
+        <button type="button" class="button-ghost" id="poster-reset-btn" style="display:none;margin-right:auto;color:var(--p-red);">Restore Default Poster</button>
+        <button type="button" class="button-ghost" data-close-poster-dialog>Cancel</button>
+        <button type="submit" class="button-dark" id="poster-submit-btn" disabled>Save Poster</button>
+      </div>
+    </form>
+  `;
+  document.body.appendChild(posterDialog);
+
+  // 2. Add Content Modal
+  const addContentDialog = document.createElement('dialog');
+  addContentDialog.id = 'memento-add-content-dialog';
+  addContentDialog.className = 'memento-modal add-content-dialog';
+  addContentDialog.setAttribute('aria-labelledby', 'add-content-dialog-title');
+  addContentDialog.innerHTML = `
+    <div class="memento-modal-header">
+      <div class="memento-modal-title-wrap">
+        <span class="memento-modal-icon">➕</span>
+        <div>
+          <h2 id="add-content-dialog-title" class="memento-modal-title">Add Content</h2>
+          <p class="memento-modal-subtitle">Search live catalog and add to Watch History or Someday.</p>
+        </div>
+      </div>
+      <button class="memento-modal-close" type="button" data-close-add-dialog aria-label="Close dialog">✕</button>
+    </div>
+
+    <div class="add-content-body">
+      <div class="add-content-category-pills" role="radiogroup" aria-label="Content Category">
+        <button type="button" class="category-pill is-active" data-add-cat="movies">Movies</button>
+        <button type="button" class="category-pill" data-add-cat="tv-shows">TV Shows</button>
+        <button type="button" class="category-pill" data-add-cat="anime">Anime</button>
+        <button type="button" class="category-pill" data-add-cat="documentaries">Documentaries</button>
+      </div>
+
+      <div class="add-content-search-wrap">
+        <input type="search" id="add-content-query" class="poster-input" placeholder="Start typing a title..." autocomplete="off">
+      </div>
+
+      <div class="add-content-status" id="add-content-status">Enter at least 2 characters to search.</div>
+      <div class="add-content-results" id="add-content-results"></div>
+    </div>
+  `;
+  document.body.appendChild(addContentDialog);
+
+  wirePosterDialogHandlers(posterDialog);
+  wireAddContentDialogHandlers(addContentDialog);
+}
+
+function wirePosterDialogHandlers(dialog) {
+  const fileInput = dialog.querySelector('#poster-file-input');
+  const dropzone = dialog.querySelector('#poster-dropzone');
+  const emptyWrap = dialog.querySelector('#poster-dropzone-empty');
+  const previewWrap = dialog.querySelector('#poster-preview-wrap');
+  const previewImg = dialog.querySelector('#poster-preview-img');
+  const previewName = dialog.querySelector('#poster-preview-filename');
+  const previewSize = dialog.querySelector('#poster-preview-size');
+  const changeBtn = dialog.querySelector('#poster-change-file-btn');
+  const alertBox = dialog.querySelector('#poster-form-alert');
+  const categorySelect = dialog.querySelector('#poster-category-select');
+  const searchInput = dialog.querySelector('#poster-title-search');
+  const searchResults = dialog.querySelector('#poster-search-results');
+  const trackedSelect = dialog.querySelector('#poster-tracked-select');
+  const selectedBadge = dialog.querySelector('#poster-selected-title-badge');
+  const selectedName = dialog.querySelector('#poster-selected-name');
+  const selectedDetails = dialog.querySelector('#poster-selected-details');
+  const clearSelectedBtn = dialog.querySelector('#poster-clear-selected-btn');
+  const resetBtn = dialog.querySelector('#poster-reset-btn');
+  const submitBtn = dialog.querySelector('#poster-submit-btn');
+  const form = dialog.querySelector('#poster-import-form');
+
+  dialog.querySelectorAll('[data-close-poster-dialog]').forEach((btn) => {
+    btn.addEventListener('click', () => dialog.close());
+  });
+  dialog.addEventListener('click', (e) => {
+    if (e.target === dialog) dialog.close();
+  });
+
+  function showAlert(msg) {
+    alertBox.textContent = msg;
+    alertBox.style.display = 'block';
+  }
+  function clearAlert() {
+    alertBox.textContent = '';
+    alertBox.style.display = 'none';
+  }
+
+  function checkCanSubmit() {
+    const can = Boolean(posterDialogDataUrl && posterDialogTargetItem);
+    submitBtn.disabled = !can;
+  }
+
+  function processFile(file) {
+    clearAlert();
+    if (!file) return;
+
+    const validTypes = ['image/png', 'image/jpeg', 'image/webp'];
+    const validExts = ['.png', '.jpg', '.jpeg', '.webp'];
+    const hasValidExt = validExts.some((ext) => file.name.toLowerCase().endsWith(ext));
+    if (!validTypes.includes(file.type) && !hasValidExt) {
+      showAlert('Unsupported format. Please select a PNG, JPEG, or WebP image.');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      showAlert('File is too large. Custom posters must be under 10MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      posterDialogDataUrl = e.target.result;
+      previewImg.src = posterDialogDataUrl;
+      previewName.textContent = file.name;
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+      previewSize.textContent = `${sizeMb} MB · ${file.type || 'image'}`;
+      emptyWrap.style.display = 'none';
+      previewWrap.style.display = 'flex';
+      checkCanSubmit();
+    };
+    reader.onerror = () => {
+      showAlert('Failed to read the selected file. Please try another image.');
+    };
+    reader.readAsDataURL(file);
+  }
+
+  dropzone.addEventListener('click', (e) => {
+    if (e.target === changeBtn || e.target.closest('#poster-change-file-btn')) {
+      fileInput.click();
+      return;
+    }
+    if (emptyWrap.style.display !== 'none') {
+      fileInput.click();
+    }
+  });
+
+  dropzone.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      fileInput.click();
+    }
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files && fileInput.files[0]) {
+      processFile(fileInput.files[0]);
+    }
+  });
+
+  dropzone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropzone.classList.add('is-dragover');
+  });
+  dropzone.addEventListener('dragleave', () => {
+    dropzone.classList.remove('is-dragover');
+  });
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('is-dragover');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      processFile(e.dataTransfer.files[0]);
+    }
+  });
+
+  function updateTrackedOptions() {
+    const cat = categorySelect.value;
+    trackedSelect.innerHTML = '<option value="">-- Choose from your collection --</option>';
+    const h = readHistory();
+    const s = readSomeday();
+    const all = [...Object.values(h), ...Object.values(s)].filter((entry) => entry && entry.category === cat && entry.item);
+    const seen = new Set();
+    all.forEach((entry) => {
+      if (seen.has(entry.item.id)) return;
+      seen.add(entry.item.id);
+      const opt = document.createElement('option');
+      opt.value = entry.item.id;
+      opt.textContent = `${entry.item.title} (${entry.item.year || '—'})`;
+      opt.dataset.itemJson = JSON.stringify(entry.item);
+      trackedSelect.appendChild(opt);
+    });
+  }
+
+  function setSelectedItem(item, cat) {
+    posterDialogTargetItem = item;
+    posterDialogTargetCategory = cat || categorySelect.value;
+    categorySelect.value = posterDialogTargetCategory;
+
+    if (item) {
+      selectedName.textContent = item.title;
+      selectedDetails.textContent = `(${item.year || '—'} · ${categories[posterDialogTargetCategory]?.label || 'Title'})`;
+      selectedBadge.style.display = 'flex';
+
+      const existingCustom = getCustomPoster(posterDialogTargetCategory, item.id);
+      resetBtn.style.display = existingCustom ? 'inline-flex' : 'none';
+    } else {
+      selectedBadge.style.display = 'none';
+      resetBtn.style.display = 'none';
+    }
+    checkCanSubmit();
+  }
+
+  categorySelect.addEventListener('change', () => {
+    posterDialogTargetCategory = categorySelect.value;
+    updateTrackedOptions();
+    if (searchInput.value.trim().length >= 2) {
+      runCandidateSearch(searchInput.value.trim());
+    }
+  });
+
+  trackedSelect.addEventListener('change', () => {
+    const opt = trackedSelect.selectedOptions[0];
+    if (opt && opt.dataset.itemJson) {
+      try {
+        const item = JSON.parse(opt.dataset.itemJson);
+        setSelectedItem(item, categorySelect.value);
+      } catch {}
+    }
+  });
+
+  function runCandidateSearch(query) {
+    const cat = categorySelect.value;
+    searchResults.innerHTML = '<p style="padding:8px 12px;margin:0;font-size:12px;color:var(--muted)">Searching catalog...</p>';
+    searchResults.style.display = 'block';
+
+    searchCategory(cat, query).then((items) => {
+      if (!items.length) {
+        searchResults.innerHTML = '<p style="padding:8px 12px;margin:0;font-size:12px;color:var(--muted)">No titles found.</p>';
+        return;
+      }
+      searchResults.innerHTML = items.slice(0, 8).map((item) => `
+        <div class="poster-candidate-item" data-candidate-id="${escapeHTML(item.id)}">
+          <img class="poster-candidate-thumb" src="${escapeHTML(item.image || fallbackImages[cat])}" alt="">
+          <div class="poster-candidate-info">
+            <span class="poster-candidate-title">${escapeHTML(item.title)}</span>
+            <span class="poster-candidate-year">${escapeHTML(item.year || '—')}</span>
+          </div>
+        </div>
+      `).join('');
+
+      searchResults.querySelectorAll('.poster-candidate-item').forEach((row, i) => {
+        row.addEventListener('click', () => {
+          setSelectedItem(items[i], cat);
+          searchResults.style.display = 'none';
+        });
+      });
+    }).catch(() => {
+      searchResults.innerHTML = '<p style="padding:8px 12px;margin:0;font-size:12px;color:var(--p-red)">Search failed. Please try again.</p>';
+    });
+  }
+
+  searchInput.addEventListener('input', () => {
+    clearTimeout(posterDialogSearchDebounce);
+    const q = searchInput.value.trim();
+    if (q.length < 2) {
+      searchResults.style.display = 'none';
+      return;
+    }
+    posterDialogSearchDebounce = setTimeout(() => runCandidateSearch(q), 300);
+  });
+
+  clearSelectedBtn.addEventListener('click', () => {
+    setSelectedItem(null, categorySelect.value);
+    trackedSelect.value = '';
+    searchInput.value = '';
+  });
+
+  resetBtn.addEventListener('click', () => {
+    if (!posterDialogTargetItem) return;
+    if (window.confirm(`Restore default poster for "${posterDialogTargetItem.title}"?`)) {
+      removeCustomPoster(posterDialogTargetCategory, posterDialogTargetItem.id);
+      dialog.close();
+      render();
+    }
+  });
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!posterDialogDataUrl || !posterDialogTargetItem) {
+      showAlert('Please select both an image and a target title.');
+      return;
+    }
+
+    setCustomPoster(posterDialogTargetCategory, posterDialogTargetItem.id, posterDialogDataUrl, posterDialogTargetItem);
+    dialog.close();
+    render();
+  });
+
+  window.openImportPosterDialog = (preItem = null, preCat = null) => {
+    clearAlert();
+    posterDialogDataUrl = null;
+    fileInput.value = '';
+    emptyWrap.style.display = 'block';
+    previewWrap.style.display = 'none';
+    searchInput.value = '';
+    searchResults.style.display = 'none';
+
+    if (preCat && categories[preCat]) {
+      categorySelect.value = preCat;
+    }
+    updateTrackedOptions();
+
+    if (preItem) {
+      setSelectedItem(preItem, preCat || categorySelect.value);
+    } else {
+      setSelectedItem(null, categorySelect.value);
+    }
+    dialog.showModal();
+  };
+}
+
+function wireAddContentDialogHandlers(dialog) {
+  const queryInput = dialog.querySelector('#add-content-query');
+  const statusEl = dialog.querySelector('#add-content-status');
+  const resultsEl = dialog.querySelector('#add-content-results');
+  const pills = dialog.querySelectorAll('.category-pill');
+
+  dialog.querySelectorAll('[data-close-add-dialog]').forEach((btn) => {
+    btn.addEventListener('click', () => dialog.close());
+  });
+  dialog.addEventListener('click', (e) => {
+    if (e.target === dialog) dialog.close();
+  });
+
+  pills.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      pills.forEach((p) => p.classList.remove('is-active'));
+      btn.classList.add('is-active');
+      addContentCategory = btn.dataset.addCat || 'movies';
+      if (queryInput.value.trim().length >= 2) {
+        doSearch(queryInput.value.trim());
+      }
+    });
+  });
+
+  function doSearch(q) {
+    statusEl.textContent = `Searching ${categories[addContentCategory]?.label || 'catalog'}...`;
+    resultsEl.innerHTML = '';
+    showThinkingOrb(resultsEl, 'Searching live catalog...', 48);
+
+    searchCategory(addContentCategory, q).then((items) => {
+      hideThinkingOrb(resultsEl);
+      if (!items.length) {
+        statusEl.textContent = 'No matching titles found.';
+        resultsEl.innerHTML = '';
+        return;
+      }
+      statusEl.textContent = `Found ${items.length} titles:`;
+      const history = readHistory();
+      const someday = readSomeday();
+
+      resultsEl.innerHTML = items.map((item) => {
+        const hKey = historyKey(addContentCategory, item);
+        const inHistory = Boolean(history[hKey]);
+        const inSomeday = Boolean(someday[hKey]);
+        const detailsHref = contentDetailsHref(addContentCategory, item);
+
+        return `
+          <div class="add-content-card">
+            <a href="${detailsHref}"><img class="add-content-thumb" src="${escapeHTML(item.image || fallbackImages[addContentCategory])}" alt=""></a>
+            <div class="add-content-card-info">
+              <h4 class="add-content-card-title"><a href="${detailsHref}">${escapeHTML(item.title)}</a></h4>
+              <p class="add-content-card-meta">${escapeHTML(item.year || '—')} · ${categories[addContentCategory]?.label || ''}</p>
+            </div>
+            <div class="add-content-card-actions">
+              <button type="button" class="add-content-btn ${inHistory ? 'is-added' : ''}" data-act-history="${escapeHTML(hKey)}" ${inHistory ? 'disabled' : ''}>${inHistory ? '✓ Tracked' : '+ History'}</button>
+              <button type="button" class="add-content-btn ${inSomeday ? 'is-added' : ''}" data-act-someday="${escapeHTML(hKey)}" ${inSomeday ? 'disabled' : ''}>${inSomeday ? '♥ Saved' : '♥ Someday'}</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      resultsEl.querySelectorAll('[data-act-history]').forEach((btn, i) => {
+        btn.addEventListener('click', () => {
+          const item = items[i];
+          const h = readHistory();
+          const k = historyKey(addContentCategory, item);
+          h[k] = { category: addContentCategory, status: 'watching', updatedAt: Date.now(), item };
+          writeHistory(h);
+          btn.textContent = '✓ Tracked';
+          btn.disabled = true;
+          btn.classList.add('is-added');
+        });
+      });
+
+      resultsEl.querySelectorAll('[data-act-someday]').forEach((btn, i) => {
+        btn.addEventListener('click', () => {
+          const item = items[i];
+          const s = readSomeday();
+          const k = historyKey(addContentCategory, item);
+          s[k] = { category: addContentCategory, status: 'planned', updatedAt: Date.now(), item };
+          writeSomeday(s);
+          btn.textContent = '♥ Saved';
+          btn.disabled = true;
+          btn.classList.add('is-added');
+        });
+      });
+    }).catch((err) => {
+      hideThinkingOrb(resultsEl);
+      statusEl.textContent = err.message || 'Search failed.';
+    });
+  }
+
+  queryInput.addEventListener('input', () => {
+    clearTimeout(addContentSearchDebounce);
+    const q = queryInput.value.trim();
+    if (q.length < 2) {
+      statusEl.textContent = 'Enter at least 2 characters to search.';
+      resultsEl.innerHTML = '';
+      return;
+    }
+    addContentSearchDebounce = setTimeout(() => doSearch(q), 300);
+  });
+
+  window.openAddContentDialog = () => {
+    queryInput.value = '';
+    statusEl.textContent = 'Enter at least 2 characters to search.';
+    resultsEl.innerHTML = '';
+    dialog.showModal();
+    queryInput.focus();
+  };
+}
+
+/* ══════════════════════════════════════
    MAIN RENDER
    ══════════════════════════════════════ */
 function render() {
@@ -1668,6 +2194,48 @@ function render() {
   const root = document.getElementById('app');
   root.innerHTML = `<div class="shell">${page === 'home' ? homeMarkup() : page === 'history' ? historyMarkup(history) : page === 'someday' ? somedayMarkup(readSomeday()) : page === 'analysis' ? analysisMarkup(history) : page === 'details' ? detailsMarkup() : categoryMarkup(page, history)}</div>`;
   setTheme(localStorage.getItem(themeStorageKey) || 'light');
+
+  // Inject Custom Poster and Add Content Dialogs
+  injectAppModals();
+
+  // Mount Liquid-Gooey Floating Action Button
+  let fabRoot = document.getElementById('memento-liquid-fab-root');
+  if (!fabRoot) {
+    fabRoot = document.createElement('div');
+    fabRoot.id = 'memento-liquid-fab-root';
+    document.body.appendChild(fabRoot);
+  }
+  if (window.MementoFx && typeof window.MementoFx.mountLiquidMenu === 'function') {
+    window.MementoFx.mountLiquidMenu(fabRoot, {
+      onAddContent: () => {
+        if (typeof window.openAddContentDialog === 'function') window.openAddContentDialog();
+      },
+      onImportPoster: () => {
+        if (typeof window.openImportPosterDialog === 'function') window.openImportPosterDialog();
+      }
+    });
+  }
+
+  // Mount MetalFx Search in Category Forms
+  root.querySelectorAll('.metal-search-slot').forEach((slot) => {
+    const categoryKey = slot.dataset.metalSlot;
+    const form = slot.closest('form');
+    if (!categoryKey || !form) return;
+    if (window.MementoFx && typeof window.MementoFx.mountMetalSearch === 'function') {
+      window.MementoFx.mountMetalSearch(slot, {
+        id: `search-${categoryKey}-metal`,
+        name: 'query',
+        placeholder: `Start typing a ${categories[categoryKey]?.singular || 'title'}...`,
+        onInput: (e) => {
+          clearTimeout(searchDebounce);
+          const query = e.target.value;
+          const fallbackInput = form.querySelector('.standard-search-input');
+          if (fallbackInput) fallbackInput.value = query;
+          searchDebounce = setTimeout(() => runSearch(form, query), 300);
+        }
+      });
+    }
+  });
 
   root.querySelector('.theme-toggle')?.addEventListener('click', () => {
     setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
@@ -1696,12 +2264,14 @@ function render() {
   });
 
   root.querySelectorAll('[data-title-search]').forEach((form) => {
-    const input = form.querySelector('input[name="query"]');
-    input.addEventListener('input', () => {
-      clearTimeout(searchDebounce);
-      const query = input.value;
-      searchDebounce = setTimeout(() => runSearch(form, query), 300);
-    });
+    const input = form.querySelector('.standard-search-input') || form.querySelector('input[name="query"]');
+    if (input) {
+      input.addEventListener('input', () => {
+        clearTimeout(searchDebounce);
+        const query = input.value;
+        searchDebounce = setTimeout(() => runSearch(form, query), 300);
+      });
+    }
     form.addEventListener('submit', (event) => event.preventDefault());
   });
 
@@ -1722,40 +2292,6 @@ function render() {
 
   if (page === 'home') {
     void loadTrendingHero();
-
-    root.querySelector('[data-cinema-more]')?.addEventListener('click', (event) => {
-      const button = event.currentTarget;
-      button.disabled = true;
-      void loadCinematicFeed(Number(button.dataset.page || 2)).finally(() => { button.disabled = false; });
-    });
-
-    root.querySelectorAll('[data-cinema-history]').forEach((button) => button.addEventListener('click', () => {
-      const item = searchResultCache.get(button.dataset.cinemaHistory);
-      if (!item) return;
-      const h = readHistory();
-      const key = historyKey(item.category, item);
-      if (h[key]) return;
-      h[key] = { category: item.category, status: 'watching', updatedAt: Date.now(), item };
-      writeHistory(h);
-      button.disabled = true;
-      button.textContent = '✓';
-      button.classList.add('is-added');
-    }));
-
-    root.querySelectorAll('[data-cinema-someday]').forEach((button) => button.addEventListener('click', () => {
-      const item = searchResultCache.get(button.dataset.cinemaSomeday);
-      if (!item) return;
-      const s = readSomeday();
-      const key = historyKey(item.category, item);
-      if (s[key]) return;
-      s[key] = { category: item.category, status: 'planned', updatedAt: Date.now(), item };
-      writeSomeday(s);
-      button.disabled = true;
-      button.classList.add('is-added');
-    }));
-
-    root.querySelector('[data-cinema-retry]')?.addEventListener('click', () => void loadCinematicFeed(1));
-    void loadCinematicFeed(1);
   }
 
   root.querySelectorAll('[data-refresh]').forEach((button) => button.addEventListener('click', () => {
